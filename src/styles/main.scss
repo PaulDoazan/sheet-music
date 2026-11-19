@@ -1,0 +1,71 @@
+// Primitives big-or-small. Les couleurs viennent du thème Vuetify actif.
+:root, .v-application {
+  --radius: 18px;
+  --display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --ink: rgb(var(--v-theme-ink));
+  --ink-2: rgb(var(--v-theme-ink-2));
+  --line: rgb(var(--v-theme-line));
+  --paper: rgb(var(--v-theme-paper));
+  --paper-2: rgb(var(--v-theme-paper-2));
+  --card: rgb(var(--v-theme-card));
+  --accent: rgb(var(--v-theme-primary));
+  --good: rgb(var(--v-theme-success));
+  --bad: rgb(var(--v-theme-error));
+  --shadow: 0 1px 0 rgba(var(--v-theme-ink), 0.06), 0 8px 24px -12px rgba(var(--v-theme-ink), 0.25);
+}
+
+html, body { margin: 0; overscroll-behavior: none; }
+html { overflow: hidden auto; }
+
+.v-application {
+  font-family: var(--display) !important;
+  font-size: 17px;
+  line-height: 1.45;
+  background-color: var(--paper) !important;
+  background-image: radial-gradient(rgba(var(--v-theme-dot), 0.05) 1px, transparent 1px) !important;
+  background-size: 18px 18px !important;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+.v-application .text-h1, .v-application .text-h2, h1, h2, h3 {
+  font-family: var(--display) !important;
+  line-height: 1.1;
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.mono { font-family: var(--mono); }
+.kicker {
+  text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.78rem;
+  color: var(--ink-2); margin: 0; font-weight: 600;
+}
+
+.card {
+  background: var(--card);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+// Bouton « enfonçable » de big-or-small
+.bos-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 20px; border-radius: 14px;
+  border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+  font: inherit; font-weight: 600; cursor: pointer; user-select: none;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  box-shadow: 0 3px 0 var(--ink);
+  transition: transform 0.08s, box-shadow 0.08s, background-color 0.15s, color 0.15s;
+  &:active, &.is-pressed { transform: translateY(3px); box-shadow: 0 0 0 var(--ink); }
+  &:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: 0 3px 0 var(--ink); }
+  &:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  &.primary { background: var(--accent); color: #fff; }
+  &.small { min-height: 36px; padding: 0 14px; font-size: 0.9rem; border-radius: 11px; }
+  &.round { width: 44px; min-height: 44px; padding: 0; }
+}
+
+.pill {
+  display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 999px;
+  background: var(--ink); color: var(--paper); font-size: 0.85rem; white-space: nowrap;
+}
