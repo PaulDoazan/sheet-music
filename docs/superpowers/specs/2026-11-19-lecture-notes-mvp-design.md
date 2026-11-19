@@ -139,7 +139,7 @@ Niveaux *(proposition, à ajuster en jouant)* :
 2. **Partie** (`/play?clef=treble&level=3`) :
    - Compte à rebours 3-2-1 puis démarrage du chrono.
    - Timeline en haut (barre qui se vide, temps restant en mono ; passe en accent les 15 dernières secondes), score à droite, bouton quitter.
-   - Portée avec une « page » de notes (8 en paysage, 5 en portrait, selon la largeur). Curseur sur la note courante.
+   - ~~Portée avec une « page » de notes~~ → remplacée par un ruban défilant (voir §8).
    - 7 boutons Do Ré Mi Fa Sol La Si sur une rangée. Clavier desktop : touches `C D E F G A B` (notation anglaise) et `1`–`7`.
    - Clic : la note prend la couleur verte ou rouge, score ±1, le curseur avance. Bouton pressé : flash vert/rouge bref.
    - Fin de page : nouvelle page générée (continuité de la marche aléatoire).
@@ -198,3 +198,13 @@ Prévu pour la brique 2 (non implémenté) : `music/playback/` (Tone.js), `music
 - Animation précise du curseur et des flashs de boutons.
 - Choix de la version de VexFlow (dernière stable) et réglages de mise en page (espacement des notes, échelle selon la hauteur dispo).
 - Visuel des cartes de choix de clé.
+
+## 8. Évolution — portée défilante et plein écran (2026-11-19)
+
+Demande de Paul : la portée défile de droite à gauche, à une vitesse qui s'adapte au rythme des réponses ; le curseur suit la prochaine note ; bouton plein écran.
+
+- **Ruban** : les notes forment un flux continu (plus de « pages ») ; 24 notes générées d'avance. Clés et portées fixes, notes qui défilent dessous, fondu aux deux bords.
+- **Vitesse** (`src/music/render/tapeScroller.ts`) : moyenne glissante des réponses/s × espacement, plus un terme de rattrapage quand la note courante est à droite de la cible (~22 % de la largeur). *Ma décision* : si le joueur ralentit ou s'arrête, le ruban freine en douceur et s'arrête avant la clé — aucune note n'est perdue ni comptée fausse.
+- **Curseur** : accroché à la note courante, il se déplace avec elle.
+- **Plein écran** : bouton dans la barre de jeu et le menu (Fullscreen API ; verrouillage paysage sur Android). Indisponible sur iPhone : manifeste web `display: fullscreen` pour l'ajout à l'écran d'accueil.
+- `StaffView` (rendu statique) reste le composant de l'éditeur à venir ; `ScrollingStaff` est spécifique au mode lecture.
