@@ -6,6 +6,7 @@ import { parsePitch, type Clef, type Score } from '@/music/model'
 import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import FullscreenToggle from '@/components/FullscreenToggle.vue'
 import { CLEF_MODES, isClefMode, isLevel, LEVEL_SPECS, LEVELS, type ClefMode, type Level } from '../levels'
 import { getBestScore } from '../bestScores'
 
@@ -78,7 +79,7 @@ function play() {
   <div class="menu">
     <header class="topbar">
       <span class="brand"><BrandMark /><span>Sheet<em>·</em>Music</span></span>
-      <ThemeToggle />
+      <div class="topbar-actions"><FullscreenToggle /><ThemeToggle /></div>
     </header>
 
     <main class="menu-main">
@@ -129,6 +130,7 @@ function play() {
   padding: 0 max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+.topbar-actions { display: flex; gap: 8px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
 .brand em { font-style: normal; font-weight: 400; color: var(--accent); margin: 0 0.12em; }
 
