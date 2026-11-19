@@ -2,15 +2,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { mdiArrowLeft } from '@mdi/js'
-import { diatonicIndex, parsePitch, SOLFEGE, type Clef, type Score, type Step } from '@/music/model'
-import StaffView, { type NoteStyle } from '@/music/render/StaffView.vue'
-import { extentForRange, type NoteLayout } from '@/music/render/layout'
+import { diatonicIndex, parsePitch, SOLFEGE, type Clef, type Step } from '@/music/model'
+import ScrollingStaff, { type TapeNote } from '@/music/render/ScrollingStaff.vue'
+import { extentForRange } from '@/music/render/layout'
 import { GAME_DURATION_MS, createReadingGame } from '../game'
 import { CLEF_MODES, isClefMode, isLevel, LEVEL_SPECS, type ClefMode, type Level } from '../levels'
 import TimelineBar from '../components/TimelineBar.vue'
 import ScoreGauge from '../components/ScoreGauge.vue'
 import NoteButtons from '../components/NoteButtons.vue'
 import RotateHint from '@/components/RotateHint.vue'
+import FullscreenToggle from '@/components/FullscreenToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,46 +27,20 @@ const { state } = game
 
 const countdown = ref(0)
 const displayedScore = ref(0)
-const notesLayout = ref<Record<string, NoteLayout>>({})
+const gameNo = ref(0)
+const staff = ref<InstanceType<typeof ScrollingStaff>>()
 const staffBox = ref<HTMLElement>()
 const gauge = ref<InstanceType<typeof ScoreGauge>>()
 const buttons = ref<InstanceType<typeof NoteButtons>>()
-
-// ---------- taille de page selon l'orientation ----------
-function pageSizeFor(): number {
-  const w = window.innerWidth
-  const h = window.innerHeight
-  if (h > w) return w < 500 ? 5 : 6
-  return w >= 1100 ? 10 : 8
-}
-function onResize() {
-  game.resizePage(pageSizeFor())
-}
 
 // ---------- partition affichée ----------
 const staffClefs = computed<Clef[]>(() =>
   clefMode.value === 'both' ? ['treble', 'bass'] : [clefMode.value as Clef],
 )
 
-const score = computed<Score>(() => ({
-  id: 'reading',
-  bpm: 60,
-  timeSignature: [4, 4],
-  staves: staffClefs.value.map((clef) => ({
-    id: clef,
-    clef,
-    voices: [
-      {
-        id: `${clef}-v1`,
-        notes: state.page.map((n) =>
-          n.clef === clef
-            ? { id: n.id, pitch: n.pitch, duration: 'q' as const }
-            : { id: `${n.id}~${clef}`, pitch: null, duration: 'q' as const },
-        ),
-      },
-    ],
-  })),
-}))
+const tapeNotes = computed<TapeNote[]>(() =>
+  state.notes.map((n) => ({ id: n.id, clef: n.clef, pitch: n.pitch, style: n.status === 'pending' ? 'default' : n.status })),
+)
 
 const extents = computed(() =>
   staffClefs.value.map((clef) => {
@@ -74,17 +49,12 @@ const extents = computed(() =>
   }),
 )
 
-const noteStyles = computed(() => {
-  const out: Record<string, NoteStyle> = {}
-  for (const n of state.page) if (n.status !== 'pending') out[n.id] = n.status
-  return out
-})
 const labels = computed(() => {
   const out: Record<string, string> = {}
-  for (const n of state.page) if (n.status === 'wrong') out[n.id] = SOLFEGE[n.pitch.step]
+  const from = Math.max(0, state.cursor - 8)
+  for (const n of state.notes.slice(from, state.cursor)) if (n.status === 'wrong') out[n.id] = SOLFEGE[n.pitch.step]
   return out
 })
-const cursorId = computed(() => (state.phase === 'playing' || countdown.value ? game.currentNote.value?.id : null))
 
 // ---------- boucle de jeu ----------
 let raf = 0
@@ -102,7 +72,8 @@ function startGame() {
   timers.forEach(clearTimeout)
   timers = []
   document.querySelectorAll('.flying-note').forEach((el) => el.remove())
-  game.setup(clefMode.value, level.value, pageSizeFor())
+  game.setup(clefMode.value, level.value)
+  gameNo.value++
   displayedScore.value = 0
   countdown.value = 3
   const step = () => {
@@ -124,13 +95,12 @@ function onAnswer(step: Step) {
   flyToGauge(r.note.id, r.ok, () => {
     displayedScore.value = scoreAfter
   })
-  if (r.pageDone) later(() => state.phase === 'playing' && game.fillPage(), 380)
 }
 
 // ---------- micro-animation : la note vole vers la jauge ----------
 const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 function flyToGauge(noteId: string, ok: boolean, onArrive: () => void) {
-  const l = notesLayout.value[noteId]
+  const l = staff.value?.notePosition(noteId)
   const box = staffBox.value?.getBoundingClientRect()
   const target = gauge.value?.el?.getBoundingClientRect()
   if (!l || !box || !target || reduceMotion) {
@@ -180,12 +150,8 @@ function quit() {
   router.push({ name: 'menu', query: { clef: clefMode.value, level: String(level.value) } })
 }
 
-onMounted(() => {
-  window.addEventListener('resize', onResize)
-  startGame()
-})
+onMounted(startGame)
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', onResize)
   cancelAnimationFrame(raf)
   timers.forEach(clearTimeout)
   document.querySelectorAll('.flying-note').forEach((el) => el.remove())
@@ -201,19 +167,21 @@ watch([clefMode, level], startGame)
       </button>
       <TimelineBar :remaining-ms="state.remainingMs" :total-ms="GAME_DURATION_MS" />
       <ScoreGauge ref="gauge" :score="displayedScore" :target="game.target.value" />
+      <FullscreenToggle />
     </header>
 
     <RotateHint inline />
 
     <section ref="staffBox" class="staff card">
-      <StaffView
-        :score="score"
-        :note-styles="noteStyles"
+      <ScrollingStaff
+        ref="staff"
+        :clefs="staffClefs"
+        :notes="tapeNotes"
+        :cursor="state.cursor"
+        :running="state.phase === 'playing'"
+        :reset-key="gameNo"
         :labels="labels"
-        :cursor-note-id="cursorId"
         :extents="extents"
-        ghost-rests
-        @layout="notesLayout = $event"
       />
       <Transition name="count">
         <div v-if="countdown > 0" :key="countdown" class="countdown mono">{{ countdown }}</div>

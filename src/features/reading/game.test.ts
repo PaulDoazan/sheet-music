@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { GAME_DURATION_MS, createReadingGame } from './game'
+import { GAME_DURATION_MS, LOOKAHEAD, createReadingGame } from './game'
 import { seededRng } from './generator'
 import { STEPS, type Step } from '@/music/model'
 
@@ -12,14 +12,14 @@ describe('createReadingGame', () => {
 
   it('compte juste / faux, plancher à 0, avance le curseur', () => {
     const g = createReadingGame()
-    g.setup('treble', 1, 8, seededRng(1))
+    g.setup('treble', 1, seededRng(1))
     expect(g.answer('C')).toBeNull() // pas encore démarré
     g.start(0)
     const r1 = g.answer(wrongStep(g.currentNote.value!.pitch.step))!
     expect(r1.ok).toBe(false)
     expect(g.state.score).toBe(0)
     expect(g.state.wrong).toBe(1)
-    expect(g.state.page[0].status).toBe('wrong')
+    expect(g.state.notes[0].status).toBe('wrong')
     expect(g.state.cursor).toBe(1)
     g.answer(g.currentNote.value!.pitch.step)
     g.answer(g.currentNote.value!.pitch.step)
@@ -29,23 +29,23 @@ describe('createReadingGame', () => {
     expect(g.accuracy.value).toBe(50)
   })
 
-  it('signale la fin de page et en génère une nouvelle', () => {
+  it('garde toujours des notes d\'avance sur le ruban', () => {
     const g = createReadingGame()
-    g.setup('both', 3, 4, seededRng(2))
+    g.setup('both', 3, seededRng(2))
     g.start(0)
-    let r
-    for (let i = 0; i < 4; i++) r = g.answer(g.currentNote.value!.pitch.step)
-    expect(r!.pageDone).toBe(true)
-    expect(g.answer('C')).toBeNull()
-    const firstIds = g.state.page.map((n) => n.id)
-    g.fillPage()
-    expect(g.state.cursor).toBe(0)
-    expect(g.state.page.map((n) => n.id)).not.toEqual(firstIds)
+    expect(g.state.notes).toHaveLength(LOOKAHEAD)
+    const firstIds = g.state.notes.map((n) => n.id)
+    for (let i = 0; i < 50; i++) g.answer(g.currentNote.value!.pitch.step)
+    expect(g.state.cursor).toBe(50)
+    expect(g.state.notes.length - g.state.cursor).toBe(LOOKAHEAD)
+    expect(g.state.notes.slice(0, LOOKAHEAD).map((n) => n.id)).toEqual(firstIds)
+    expect(g.state.notes.slice(0, 50).every((n) => n.status === 'correct')).toBe(true)
+    expect(new Set(g.state.notes.map((n) => n.id)).size).toBe(g.state.notes.length)
   })
 
   it('termine à 2 min et enregistre le record', () => {
     const g = createReadingGame()
-    g.setup('bass', 2, 8, seededRng(3))
+    g.setup('bass', 2, seededRng(3))
     g.start(1000)
     g.answer(g.currentNote.value!.pitch.step)
     g.tick(1000 + GAME_DURATION_MS - 1)
@@ -55,7 +55,7 @@ describe('createReadingGame', () => {
     expect(g.state.newRecord).toBe(true)
     expect(g.answer('C')).toBeNull()
 
-    g.setup('bass', 2, 8, seededRng(4))
+    g.setup('bass', 2, seededRng(4))
     expect(g.state.bestBefore).toBe(1)
   })
 })
