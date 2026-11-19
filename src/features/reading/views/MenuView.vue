@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { mdiPlay } from '@mdi/js'
+import { mdiPencil, mdiPlay } from '@mdi/js'
 import { parsePitch, type Clef, type Score } from '@/music/model'
 import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
@@ -79,7 +79,10 @@ function play() {
   <div class="menu">
     <header class="topbar">
       <span class="brand"><BrandMark /><span>Sheet<em>·</em>Music</span></span>
-      <div class="topbar-actions"><FullscreenToggle /><ThemeToggle /></div>
+      <div class="topbar-actions">
+        <router-link :to="{ name: 'scores' }" class="bos-btn small write-link"><v-icon :icon="mdiPencil" size="18" /> Écrire</router-link>
+        <FullscreenToggle /><ThemeToggle />
+      </div>
     </header>
 
     <main class="menu-main">
@@ -131,6 +134,7 @@ function play() {
 }
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
 .topbar-actions { display: flex; gap: 8px; }
+.write-link { text-decoration: none; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
 .brand em { font-style: normal; font-weight: 400; color: var(--accent); margin: 0 0.12em; }
 

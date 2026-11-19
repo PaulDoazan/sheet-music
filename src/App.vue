@@ -14,6 +14,6 @@ watch(
 <template>
   <v-app>
     <router-view />
-    <RotateHint v-if="$route.name !== 'play'" />
+    <RotateHint v-if="$route.name !== 'play' && $route.name !== 'editor'" />
   </v-app>
 </template>

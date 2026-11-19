@@ -6,6 +6,8 @@ export default createRouter({
   routes: [
     { path: '/', name: 'menu', component: () => import('./features/reading/views/MenuView.vue') },
     { path: '/play', name: 'play', component: () => import('./features/reading/views/GameView.vue') },
+    { path: '/scores', name: 'scores', component: () => import('./features/editor/views/ScoresView.vue') },
+    { path: '/scores/:id', name: 'editor', component: () => import('./features/editor/views/EditorView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

@@ -16,9 +16,14 @@ function showResult(step: Step, ok: boolean) {
 }
 
 // Clavier : notation anglaise C…B, ou 1…7
+function isTyping(t: EventTarget | null) {
+  const el = t as HTMLElement | null
+  return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+}
 const KEYS: Record<string, Step> = { c: 'C', d: 'D', e: 'E', f: 'F', g: 'G', a: 'A', b: 'B' }
 function onKey(e: KeyboardEvent) {
   if (props.disabled || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+  if (isTyping(e.target)) return
   const k = e.key.toLowerCase()
   const step = KEYS[k] ?? (/^[1-7]$/.test(k) ? STEPS[Number(k) - 1] : undefined)
   if (step) {
