@@ -176,6 +176,7 @@ export function createScoreEditor(score: Ref<Score>) {
     if (sel.length === 1) {
       const next = neighbour(sel[0], 1)
       if (next) selectedIds.value = [next.note.id]
+      dotted.value = false // le point de durée ne vaut que pour une note
     }
   }
   const setNoteDuration = (n: Note) => {
@@ -199,8 +200,8 @@ export function createScoreEditor(score: Ref<Score>) {
     applyRhythm((n) => {
       n.pitch = null
       if (n.point) {
-        n.duration = duration.value
-        if (dotted.value) n.dots = 1
+        n.duration = 'q' // un point sans rythme devient un soupir
+        delete n.dots
         delete n.point
       }
     })

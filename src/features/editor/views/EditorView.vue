@@ -121,6 +121,15 @@ function toStart() {
   view.value?.scrollToTop()
 }
 
+// Toute modification de la partition (outils, clavier, annuler, chiffrage) arrête l'écoute.
+watch(
+  () => [score.value.staves, score.value.timeSignature, score.value.measureCount],
+  () => {
+    if (playing.value) stopPlay()
+  },
+  { deep: true },
+)
+
 // --- Tempo -----------------------------------------------------------------------------------
 function setBpm(v: number) {
   const bpm = Math.max(40, Math.min(208, Math.round(v)))

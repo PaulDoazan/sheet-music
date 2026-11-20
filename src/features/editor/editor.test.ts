@@ -142,3 +142,25 @@ describe('éditeur v2', () => {
     expect(ed.selectedIds.value).toEqual([t.id])
   })
 })
+
+describe('revue finale', () => {
+  it('le point (note pointée) ne vaut que pour une note pendant l’enchaînement', () => {
+    const { ed, desc } = setup()
+    const a = ed.placePoint(0, 0, 0, parsePitch('C5'))
+    ed.placePoint(0, 0, 1, parsePitch('D5'))
+    ed.placePoint(0, 0, 2, parsePitch('E5'))
+    ed.tapElement(a.id)
+    ed.toggleDot()
+    ed.setDuration('q')
+    ed.setDuration('8')
+    expect(desc()[0]).toEqual(['c/5q.', 'd/58', 'e/5•'])
+    expect(ed.dotted.value).toBe(false)
+  })
+  it('un point transformé en silence devient une noire', () => {
+    const { ed, desc } = setup()
+    ed.setDuration('16')
+    ed.placePoint(0, 0, 0, parsePitch('C5'))
+    ed.toRest()
+    expect(desc()[0]).toEqual(['rq'])
+  })
+})

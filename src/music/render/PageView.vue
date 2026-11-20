@@ -35,7 +35,8 @@ import {
   type Staff,
 } from '@/music/model'
 import { LINE_SPACING } from './layout'
-import { MAX_STEP, MIN_STEP, pitchAtStep, stepOfPitch } from './pitchFromY'
+import { MAX_STEP, MIN_STEP, pitchAtStep } from './pitchFromY'
+import { hitElement } from './hit'
 
 const props = withDefaults(
   defineProps<{
@@ -63,7 +64,6 @@ const SYS_MARGIN = 4 * LINE_SPACING // au-dessus de la 1re portée / sous la der
 const SYS_GAP = 2 * LINE_SPACING
 const LEFT = 56 // gouttière des noms de voix
 const RIGHT = 26 // bouton de suppression de ligne
-const HIT_X = 14
 
 interface ElemBox {
   id: string
@@ -372,8 +372,7 @@ function onDown(e: PointerEvent) {
   const box = hitBox(lx, ly)
   if (!box) return
   canvas.value!.setPointerCapture(e.pointerId)
-  let hit: ElemBox | null = null
-  for (const el of box.elems) if (Math.abs(el.x - lx) < HIT_X && (!hit || Math.abs(el.x - lx) < Math.abs(hit.x - lx))) hit = el
+  const hit = hitElement(box.elems, lx, ly)
   if (hit) {
     gesture.value = { pointerId: e.pointerId, kind: 'element', box, id: hit.id, startY: e.clientY, lx, ly }
   } else if (props.multi) {
