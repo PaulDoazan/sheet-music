@@ -12,6 +12,7 @@ import {
   mdiMusicNoteWhole,
   mdiMusicRestQuarter,
   mdiRedo,
+  mdiSelectMultiple,
   mdiUndo,
 } from '@mdi/js'
 import type { Duration } from '@/music/model'
@@ -27,7 +28,9 @@ const DURATIONS: { d: Duration; icon: string; label: string; key: string }[] = [
   { d: '16', icon: mdiMusicNoteSixteenth, label: 'Double croche', key: 'S' },
 ]
 
-const alter = () => props.editor.selected.value?.pitch?.alter ?? 0
+const has = () => props.editor.selectedIds.value.length > 0
+const hasPitch = () => props.editor.primary.value?.note.pitch != null
+const alter = () => props.editor.primary.value?.note.pitch?.alter ?? 0
 </script>
 
 <template>
@@ -61,14 +64,14 @@ const alter = () => props.editor.selected.value?.pitch?.alter ?? 0
     </div>
 
     <div class="group">
-      <button type="button" class="tool" title="Silence (R ou 0)" aria-label="Silence" @click="editor.insertRest()">
+      <button type="button" class="tool" :disabled="!has()" title="Transformer en silence (R)" aria-label="Silence" @click="editor.toRest()">
         <v-icon :icon="mdiMusicRestQuarter" size="22" />
       </button>
       <button
         type="button"
         class="tool"
         :class="{ on: alter() === 1 }"
-        :disabled="!editor.selected.value?.pitch"
+        :disabled="!hasPitch()"
         title="Dièse (+)"
         aria-label="Dièse"
         @click="editor.setAlter(1)"
@@ -79,7 +82,7 @@ const alter = () => props.editor.selected.value?.pitch?.alter ?? 0
         type="button"
         class="tool"
         :class="{ on: alter() === -1 }"
-        :disabled="!editor.selected.value?.pitch"
+        :disabled="!hasPitch()"
         title="Bémol (-)"
         aria-label="Bémol"
         @click="editor.setAlter(-1)"
@@ -89,20 +92,20 @@ const alter = () => props.editor.selected.value?.pitch?.alter ?? 0
       <button
         type="button"
         class="tool"
-        :disabled="!editor.selected.value?.pitch"
+        :disabled="!hasPitch()"
         title="Monter (↑, ⇧↑ octave)"
         aria-label="Monter la note"
-        @click="editor.transposeSelected(1)"
+        @click="editor.transpose(1)"
       >
         <v-icon :icon="mdiArrowUpBold" size="20" />
       </button>
       <button
         type="button"
         class="tool"
-        :disabled="!editor.selected.value?.pitch"
+        :disabled="!hasPitch()"
         title="Descendre (↓, ⇧↓ octave)"
         aria-label="Descendre la note"
-        @click="editor.transposeSelected(-1)"
+        @click="editor.transpose(-1)"
       >
         <v-icon :icon="mdiArrowDownBold" size="20" />
       </button>
@@ -112,7 +115,18 @@ const alter = () => props.editor.selected.value?.pitch?.alter ?? 0
       <button
         type="button"
         class="tool"
-        :disabled="!editor.selected.value"
+        :class="{ on: editor.multi.value }"
+        :aria-pressed="editor.multi.value"
+        title="Sélection multiple"
+        aria-label="Sélection multiple"
+        @click="editor.multi.value = !editor.multi.value"
+      >
+        <v-icon :icon="mdiSelectMultiple" size="20" />
+      </button>
+      <button
+        type="button"
+        class="tool"
+        :disabled="!has()"
         title="Supprimer (⌫)"
         aria-label="Supprimer la note"
         @click="editor.removeSelected()"

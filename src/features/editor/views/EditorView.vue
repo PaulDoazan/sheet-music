@@ -14,9 +14,8 @@ import {
   mdiVolumeOff,
   mdiHeadphones,
 } from '@mdi/js'
-import { measureBeats, noteBeats, noteStarts, STEPS, type Score, type Step } from '@/music/model'
-import ScoreView from '@/music/render/ScoreView.vue'
-import NoteButtons from '@/features/reading/components/NoteButtons.vue'
+import { measureBeats, migrateScore, noteBeats, STEPS, timeline, type Pitch, type Score, type Step } from '@/music/model'
+import PageView from '@/music/render/PageView.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import RotateHint from '@/components/RotateHint.vue'
@@ -41,7 +40,7 @@ watch(
   data,
   (d) => {
     if (d && !loaded.value) {
-      score.value = clone(d)
+      score.value = migrateScore(clone(d)) // partitions v1 : converties en mesures
       loaded.value = true
     }
   },
@@ -78,45 +77,36 @@ const effectiveMuted = computed(() =>
   score.value.staves.map((_, i) => (solo.value != null ? solo.value !== i : !!muted.value[i])),
 )
 watch(effectiveMuted, (m) => m.forEach((v, i) => player.setMuted(i, v)))
-const view = ref<InstanceType<typeof ScoreView>>()
+const view = ref<InstanceType<typeof PageView>>()
 
-/** Début de la mesure du curseur (en temps). */
-function cursorMeasureStart(): number {
-  const notes = score.value.staves[editor.cursor.staff]?.voices[0].notes ?? []
-  if (editor.cursor.index === 0) return 0
-  const starts = noteStarts(notes)
-  const t = starts[editor.cursor.index - 1] ?? 0
-  const pm = measureBeats(score.value.timeSignature)
-  return Math.floor(t / pm + 1e-6) * pm
+/** Début de la mesure de l'élément sélectionné (en temps), sinon 0. */
+function startBeat(): number {
+  const p = editor.primary.value
+  return p ? p.measure * measureBeats(score.value.timeSignature) : 0
 }
 
 let raf = 0
+let events: ReturnType<typeof timeline> = []
 function loop() {
   const beat = player.currentBeat()
   if (beat == null) {
     raf = requestAnimationFrame(loop)
     return
   }
-  const ids: string[] = []
-  score.value.staves.forEach((st) => {
-    const notes = st.voices[0].notes
-    const starts = noteStarts(notes)
-    for (let k = 0; k < notes.length; k++) {
-      if (starts[k] > beat) break
-      if (notes[k].pitch && beat < starts[k] + noteBeats(notes[k])) ids.push(notes[k].id)
-    }
-  })
+  const ids = events
+    .filter((e) => e.note.pitch && e.start <= beat && beat < e.start + noteBeats(e.note))
+    .map((e) => e.note.id)
   if (ids.join() !== playingIds.value.join()) {
     playingIds.value = ids
-    const x = ids.length ? view.value?.noteX(ids[0]) : null
-    if (x != null) view.value?.ensureVisible(x)
+    if (ids.length) view.value?.ensureVisible(ids[0])
   }
   raf = requestAnimationFrame(loop)
 }
 async function togglePlay() {
   if (playing.value) return stopPlay()
   playing.value = true
-  await player.play(score.value, { fromBeat: cursorMeasureStart(), muted: effectiveMuted.value, onEnd: stopPlay })
+  events = timeline(score.value)
+  await player.play(score.value, { fromBeat: startBeat(), muted: effectiveMuted.value, onEnd: stopPlay })
   cancelAnimationFrame(raf)
   raf = requestAnimationFrame(loop)
 }
@@ -127,9 +117,18 @@ function stopPlay() {
   playingIds.value = []
 }
 function toStart() {
-  editor.selectAfter(editor.cursor.staff, 0)
-  view.value?.ensureVisible(0)
+  editor.clearSelection()
+  view.value?.scrollToTop()
 }
+
+// Toute modification de la partition (outils, clavier, annuler, chiffrage) arrête l'écoute.
+watch(
+  () => [score.value.staves, score.value.timeSignature, score.value.measureCount],
+  () => {
+    if (playing.value) stopPlay()
+  },
+  { deep: true },
+)
 
 // --- Tempo -----------------------------------------------------------------------------------
 function setBpm(v: number) {
@@ -152,9 +151,25 @@ function edit<T>(fn: () => T): T {
   if (playing.value) stopPlay()
   return fn()
 }
-function onNote(step: Step) {
-  edit(() => editor.insertNote(step))
+// --- Gestes sur la page ------------------------------------------------------------------------
+function onPlace(staff: number, measure: number, index: number, pitch: Pitch) {
+  edit(() => editor.placePoint(staff, measure, index, pitch))
 }
+function onRemoveLine(line: number) {
+  const from = line * 4
+  const hasContent = score.value.staves.some((st) =>
+    (st.voices[0].measures ?? []).slice(from, from + 4).some((m) => m.length > 0),
+  )
+  if (hasContent && !window.confirm(`Supprimer la ligne ${line + 1} et ses notes ?`)) return
+  edit(() => editor.removeLine(line))
+}
+// la vue suit l'élément principal (enchaînement des durées, flèches)
+watch(
+  () => editor.selectedIds.value[0],
+  (id) => {
+    if (id && !playing.value) view.value?.ensureVisible(id)
+  },
+)
 const DURATION_KEYS: Record<string, 'w' | 'h' | 'q' | '8' | '16'> = { w: 'w', h: 'h', q: 'q', i: '8', s: '16' }
 function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null
@@ -170,10 +185,15 @@ function onKey(e: KeyboardEvent) {
   else if (k === 'ArrowRight') editor.move(1)
   else if (k === 'ArrowUp' && e.altKey) editor.moveStaff(-1)
   else if (k === 'ArrowDown' && e.altKey) editor.moveStaff(1)
-  else if (k === 'ArrowUp') edit(() => editor.transposeSelected(e.shiftKey ? 7 : 1))
-  else if (k === 'ArrowDown') edit(() => editor.transposeSelected(e.shiftKey ? -7 : -1))
+  else if (k === 'ArrowUp') edit(() => editor.transpose(e.shiftKey ? 7 : 1))
+  else if (k === 'ArrowDown') edit(() => editor.transpose(e.shiftKey ? -7 : -1))
   else if (k === 'Backspace' || k === 'Delete') edit(() => editor.removeSelected())
-  else if (k === 'r' || k === 'R' || k === '0') edit(() => editor.insertRest())
+  else if (k === 'Escape') editor.clearSelection()
+  else if (k === 'r' || k === 'R') edit(() => editor.toRest())
+  else if (/^[a-g1-7]$/i.test(k) && !(DURATION_KEYS[k.toLowerCase()] && !STEPS.includes(k.toUpperCase() as Step))) {
+    const step = /^[1-7]$/.test(k) ? STEPS[Number(k) - 1] : (k.toUpperCase() as Step)
+    edit(() => editor.insertPointAfterSelection(step))
+  }
   else if (k === '.') editor.toggleDot()
   else if (k === '+') edit(() => editor.setAlter(1))
   else if (k === '-') edit(() => editor.setAlter(-1))
@@ -189,7 +209,7 @@ onBeforeUnmount(() => {
   flushSave()
 })
 
-const empty = computed(() => score.value.staves.every((s) => s.voices[0].notes.length === 0))
+const empty = computed(() => score.value.staves.every((s) => (s.voices[0].measures ?? []).every((m) => !m.length)))
 </script>
 
 <template>
@@ -292,7 +312,7 @@ const empty = computed(() => score.value.staves.every((s) => s.voices[0].notes.l
               type="button"
               class="ts-btn mono"
               :class="{ on: tsKey(t) === tsKey(score.timeSignature) }"
-              @click="score.timeSignature = [...t]"
+              @click="editor.setTimeSignature(t)"
             >
               {{ tsKey(t) }}
             </button>
@@ -310,21 +330,26 @@ const empty = computed(() => score.value.staves.every((s) => s.voices[0].notes.l
     <main class="sheet card">
       <p v-if="isError" class="state">Partition introuvable. <router-link :to="{ name: 'scores' }">Mes partitions</router-link></p>
       <template v-else-if="loaded">
-        <ScoreView
+        <PageView
           ref="view"
           :score="score"
-          :cursor="editor.cursor"
+          :selected-ids="editor.selectedIds.value"
           :playing-ids="playingIds"
           :muted-staves="effectiveMuted"
-          @select="(s, i) => editor.selectAfter(s, i)"
+          :multi="editor.multi.value"
+          @place="onPlace"
+          @tap-element="(id) => editor.tapElement(id)"
+          @tap-measure="(st, m) => editor.selectMeasure(st, m)"
+          @repitch="(id, p) => edit(() => editor.setPitch(id, p))"
+          @add-line="edit(() => editor.addLine())"
+          @remove-line="onRemoveLine"
         />
-        <p v-if="empty" class="hint">Choisis une durée puis tape les notes. Touche une portée pour changer de voix.</p>
+        <p v-if="empty" class="hint">Touche la portée pour poser une note, puis choisis son rythme.</p>
       </template>
     </main>
 
     <footer class="input">
       <EditorToolbar :editor="editor" />
-      <NoteButtons class="notes" :disabled="!loaded" @answer="onNote" />
     </footer>
   </div>
 </template>
@@ -379,23 +404,16 @@ const empty = computed(() => score.value.staves.every((s) => s.voices[0].notes.l
 .state, .hint { margin: 0; color: var(--ink-2); font-size: 0.9rem; }
 .state { padding: 20px; }
 .hint {
-  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); pointer-events: none;
+  position: absolute; left: 50%; top: 6px; transform: translateX(-50%); pointer-events: none;
   background: var(--card); padding: 2px 10px; border-radius: 999px; white-space: nowrap; max-width: 95%;
   overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem;
 }
-.input { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.notes :deep(.note-btn) { min-height: clamp(42px, 10dvh, 60px); }
+.input { display: flex; justify-content: center; min-width: 0; }
 
 @media (orientation: landscape) and (max-height: 500px) {
   .editor { gap: 6px; }
   .title { font-size: 1rem; }
   .save-state { display: none; }
-  .input { flex-direction: row; align-items: center; gap: 8px; }
-  .input > :first-child { flex: none; }
-  .input :deep(.tool) { min-width: 31px; }
-  .input :deep(.toolbar) { gap: 5px; }
-  .notes { flex: 1; min-width: 0; gap: 4px; }
-  .notes :deep(.note-btn) { min-height: 42px; font-size: 0.9rem; padding: 0; }
 }
 @media (max-width: 520px) {
   .save-state { display: none; }

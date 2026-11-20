@@ -1,4 +1,4 @@
-import type { Clef, Score, Staff } from '@/music/model'
+import { LINE_MEASURES, type Clef, type Score, type Staff } from '@/music/model'
 
 export type TemplateId = 'satb' | 'ssatb' | 'melody' | 'piano'
 
@@ -59,7 +59,15 @@ export function createScore(templateId: TemplateId, title = 'Sans titre'): Score
     clef: d.clef,
     ...(d.clefOctave ? { clefOctave: d.clefOctave } : {}),
     program: d.program,
-    voices: [{ id: uid('v'), notes: [] }],
+    voices: [{ id: uid('v'), notes: [], measures: Array.from({ length: LINE_MEASURES }, () => []) }],
   }))
-  return { id: uid('score-'), title, bpm: 80, timeSignature: [4, 4], staves, updatedAt: Date.now() }
+  return {
+    id: uid('score-'),
+    title,
+    bpm: 80,
+    timeSignature: [4, 4],
+    staves,
+    measureCount: LINE_MEASURES,
+    updatedAt: Date.now(),
+  }
 }

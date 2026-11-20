@@ -2,7 +2,7 @@
  * Lecture d'une partition avec Tone.js (chargé à la demande).
  * Les temps sont exprimés en ticks du Transport : changer le BPM pendant la lecture fonctionne.
  */
-import { noteBeats, noteStarts, pitchToMidi, totalBeats, type Score } from '@/music/model'
+import { migrateScore, noteBeats, pitchToMidi, timeline, type Score } from '@/music/model'
 
 type ToneNS = typeof import('tone')
 
@@ -45,6 +45,7 @@ export function createPlayer() {
     const from = opts.fromBeat ?? 0
     origin = from
     const ticks = (beats: number) => `${Math.max(0, Math.round(beats * ppq))}i`
+    const all = timeline(migrateScore(score)) // les points comptent comme des noires
 
     score.staves.forEach((staff, si) => {
       const vol = new T.Volume(-10).toDestination()
@@ -57,16 +58,12 @@ export function createPlayer() {
           : { attack: 0.07, decay: 0.15, sustain: 0.8, release: 0.35 },
       }).connect(vol)
       const events: { time: string; freq: number; dur: string }[] = []
-      for (const voice of staff.voices) {
-        const starts = noteStarts(voice.notes)
-        voice.notes.forEach((n, k) => {
-          if (!n.pitch || starts[k] + noteBeats(n) <= from) return
-          if (starts[k] < from) return // note commencée avant le point de départ : on ne la joue pas
-          events.push({
-            time: ticks(starts[k] - from),
-            freq: T.Frequency(pitchToMidi(n.pitch), 'midi').toFrequency(),
-            dur: ticks(noteBeats(n) * 0.95),
-          })
+      for (const e of all) {
+        if (e.staff !== si || !e.note.pitch || e.start < from) continue // commencée avant le départ : ignorée
+        events.push({
+          time: ticks(e.start - from),
+          freq: T.Frequency(pitchToMidi(e.note.pitch), 'midi').toFrequency(),
+          dur: ticks(noteBeats(e.note) * 0.95),
         })
       }
       const part = new T.Part<{ time: string; freq: number; dur: string }>((time, ev) => {
@@ -83,7 +80,7 @@ export function createPlayer() {
       })
     })
 
-    const end = Math.max(0, ...score.staves.map((s) => totalBeats(s.voices[0]?.notes ?? [])))
+    const end = Math.max(0, ...all.map((e) => e.start + noteBeats(e.note)))
     t.scheduleOnce(() => {
       setTimeout(() => {
         stop()
