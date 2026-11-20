@@ -112,7 +112,9 @@ function shortName(s: Staff, i: number) {
 const names = computed(() => props.score.staves.map(shortName))
 
 const displayKey = (p: Pitch, staff: Staff) => pitchToVexKey({ ...p, octave: p.octave - (staff.clefOctave ?? 0) })
-const restKey = (staff: Staff) => (staff.clef === 'bass' ? 'd/3' : 'b/4')
+/** Ligne d'accroche des silences : la pause (ronde) pend sous la 4e ligne. */
+const restKey = (staff: Staff, d: string = 'q') =>
+  d === 'w' ? (staff.clef === 'bass' ? 'f/3' : 'd/5') : staff.clef === 'bass' ? 'd/3' : 'b/4'
 const measuresOf = (si: number) => props.score.staves[si]?.voices[0]?.measures ?? []
 
 function draw() {
@@ -165,7 +167,7 @@ function draw() {
           for (const note of content) {
             let sn: StaveNote
             if (!note.pitch) {
-              sn = new StaveNote({ keys: [restKey(staff)], duration: `${note.duration}r`, dots: note.dots ?? 0, clef: staff.clef })
+              sn = new StaveNote({ keys: [restKey(staff, note.duration)], duration: `${note.duration}r`, dots: note.dots ?? 0, clef: staff.clef })
             } else {
               sn = new StaveNote({
                 keys: [displayKey(note.pitch, staff)],
@@ -189,7 +191,7 @@ function draw() {
           const fillers =
             fill.state === 'empty' ? [{ duration: 'w' as const }] : fill.state === 'under' ? fillerRests(pm - fill.used) : []
           for (const f of fillers) {
-            const r = new StaveNote({ keys: [restKey(staff)], duration: `${f.duration}r`, clef: staff.clef })
+            const r = new StaveNote({ keys: [restKey(staff, f.duration)], duration: `${f.duration}r`, clef: staff.clef })
             r.setStyle({ fillStyle: colors.value.muted, strokeStyle: colors.value.muted })
             if (fill.state === 'empty') r.setCenterAlignment(true)
             notes.push(r)
