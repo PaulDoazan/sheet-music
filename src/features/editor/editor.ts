@@ -1,26 +1,32 @@
 /**
- * Logique de l'éditeur, indépendante du rendu : curseur d'insertion par portée, saisie, historique.
- * La « note sélectionnée » est celle juste avant le curseur (la dernière saisie, ou celle qu'on a tapée).
+ * Logique de l'éditeur v2, indépendante du rendu.
+ * Mesures explicites ; on pose des points (hauteur sans rythme), puis on leur donne une durée.
+ * La sélection est une liste d'ids de notes ; le premier est l'élément « principal ».
  */
-import { computed, reactive, ref, type Ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
 import {
   diatonicIndex,
-  fitDuration,
   fromDiatonicIndex,
-  measureBeats,
-  noteBeats,
-  noteStarts,
+  LINE_MEASURES,
+  STEPS,
   type Alter,
   type Duration,
   type Note,
+  type Pitch,
   type Score,
   type Staff,
   type Step,
-  STEPS,
 } from '@/music/model'
 import { uid } from './templates'
 
-/** Note de référence pour la première saisie d'une portée : la ligne du milieu. */
+export interface Loc {
+  staff: number
+  measure: number
+  index: number
+  note: Note
+}
+
+/** Note de référence d'une portée vide : la ligne du milieu. */
 export function centerIndex(staff: Staff): number {
   const base = staff.clef === 'bass' ? 3 * 7 + 1 /* D3 */ : 4 * 7 + 6 /* B4 */
   return base + (staff.clefOctave ?? 0) * 7
@@ -29,189 +35,296 @@ export function centerIndex(staff: Staff): number {
 /** Octave la plus proche de la référence pour un degré donné. */
 export function nearestIndex(step: Step, refIndex: number): number {
   const s = STEPS.indexOf(step)
-  const oct = Math.round((refIndex - s) / 7)
-  return oct * 7 + s
+  return Math.round((refIndex - s) / 7) * 7 + s
 }
 
 const HISTORY_MAX = 200
 
 export function createScoreEditor(score: Ref<Score>) {
-  const cursor = reactive({ staff: 0, index: 0 })
+  const selectedIds = ref<string[]>([])
+  const multi = ref(false)
   const duration = ref<Duration>('q')
   const dotted = ref(false)
-  /**
-   * Vrai quand l'utilisateur a désigné une note (tap, flèches) : changer de durée la modifie.
-   * Faux juste après une saisie : la durée choisie vaut pour la note suivante.
-   */
-  const editingSelected = ref(false)
   const undoStack: string[] = []
   const redoStack: string[] = []
-  const historyVersion = ref(0) // rend canUndo/canRedo réactifs
+  const historyVersion = ref(0)
 
-  const notesOf = (si: number): Note[] => score.value.staves[si]?.voices[0]?.notes ?? []
-  const currentNotes = computed(() => notesOf(cursor.staff))
-  const selected = computed<Note | null>(() => currentNotes.value[cursor.index - 1] ?? null)
-  const perMeasure = computed(() => measureBeats(score.value.timeSignature))
+  const measuresOf = (si: number): Note[][] => score.value.staves[si]?.voices[0]?.measures ?? []
 
+  function locate(id: string): Loc | null {
+    const staves = score.value.staves
+    for (let s = 0; s < staves.length; s++) {
+      const ms = measuresOf(s)
+      for (let m = 0; m < ms.length; m++) {
+        const index = ms[m].findIndex((n) => n.id === id)
+        if (index >= 0) return { staff: s, measure: m, index, note: ms[m][index] }
+      }
+    }
+    return null
+  }
+  const primary = computed<Loc | null>(() => (selectedIds.value[0] ? locate(selectedIds.value[0]) : null))
+  const selectedNotes = () => selectedIds.value.map(locate).filter((l): l is Loc => !!l)
+
+  // --- historique -----------------------------------------------------------------------
+  const state = () =>
+    JSON.stringify({
+      staves: score.value.staves,
+      measureCount: score.value.measureCount,
+      timeSignature: score.value.timeSignature,
+      selectedIds: selectedIds.value,
+    })
   function snapshot() {
-    undoStack.push(JSON.stringify({ staves: score.value.staves, cursor: { ...cursor } }))
+    undoStack.push(state())
     if (undoStack.length > HISTORY_MAX) undoStack.shift()
     redoStack.length = 0
     historyVersion.value++
   }
   function restore(raw: string) {
-    const s = JSON.parse(raw) as { staves: Staff[]; cursor: { staff: number; index: number } }
+    const s = JSON.parse(raw)
     score.value.staves = s.staves
-    Object.assign(cursor, s.cursor)
-  }
-  function current() {
-    return JSON.stringify({ staves: score.value.staves, cursor: { ...cursor } })
+    score.value.measureCount = s.measureCount
+    score.value.timeSignature = s.timeSignature
+    selectedIds.value = s.selectedIds
   }
   function undo() {
     const s = undoStack.pop()
     if (!s) return
-    redoStack.push(current())
+    redoStack.push(state())
     restore(s)
     historyVersion.value++
   }
   function redo() {
     const s = redoStack.pop()
     if (!s) return
-    undoStack.push(current())
+    undoStack.push(state())
     restore(s)
     historyVersion.value++
   }
   const canUndo = computed(() => (historyVersion.value, undoStack.length > 0))
   const canRedo = computed(() => (historyVersion.value, redoStack.length > 0))
 
-  /** Place restante dans la mesure, à la position du curseur. */
-  function roomAtCursor(): number {
-    const notes = currentNotes.value
-    const starts = noteStarts(notes)
-    const t = cursor.index < notes.length ? starts[cursor.index] : starts.length ? starts[starts.length - 1] + noteBeats(notes[notes.length - 1]) : 0
-    const pm = perMeasure.value
-    const pos = t - Math.floor(t / pm + 1e-6) * pm
-    return pm - pos
+  // --- parcours d'une portée ----------------------------------------------------------------
+  function flat(staff: number): Loc[] {
+    const out: Loc[] = []
+    measuresOf(staff).forEach((m, measure) => m.forEach((note, index) => out.push({ staff, measure, index, note })))
+    return out
+  }
+  function neighbour(loc: Loc, delta: number): Loc | null {
+    const list = flat(loc.staff)
+    const k = list.findIndex((l) => l.note.id === loc.note.id)
+    return list[k + delta] ?? null
   }
 
-  function insert(pitch: Note['pitch']) {
-    const fit = fitDuration({ duration: duration.value, dots: dotted.value ? 1 : 0 }, roomAtCursor())
-    if (!fit) return
-    snapshot()
-    const note: Note = { id: uid('n'), pitch, duration: fit.duration, ...(fit.dots ? { dots: 1 as const } : {}) }
-    currentNotes.value.splice(cursor.index, 0, note)
-    cursor.index++
-    editingSelected.value = false
-    return note
+  // --- sélection ----------------------------------------------------------------------------
+  function selectOnly(id: string | null) {
+    selectedIds.value = id ? [id] : []
+    syncPalette()
   }
-
-  function refIndex(): number {
-    const notes = currentNotes.value
-    for (let i = cursor.index - 1; i >= 0; i--) {
-      const p = notes[i].pitch
-      if (p) return diatonicIndex(p)
-    }
-    return centerIndex(score.value.staves[cursor.staff])
-  }
-
-  function insertNote(step: Step) {
-    const idx = nearestIndex(step, refIndex())
-    return insert(fromDiatonicIndex(idx))
-  }
-
-  function insertRest() {
-    return insert(null)
-  }
-
-  function removeSelected() {
-    if (cursor.index === 0) return
-    snapshot()
-    currentNotes.value.splice(cursor.index - 1, 1)
-    cursor.index--
-  }
-
-  /** Monte/descend la note sélectionnée de `degrees` degrés (7 = une octave). */
-  function transposeSelected(degrees: number) {
-    const n = selected.value
-    if (!n?.pitch) return
-    snapshot()
-    const p = fromDiatonicIndex(diatonicIndex(n.pitch) + degrees)
-    n.pitch = { ...p, ...(n.pitch.alter ? { alter: n.pitch.alter } : {}) }
-  }
-
-  function setAlter(alter: Alter) {
-    const n = selected.value
-    if (!n?.pitch) return
-    snapshot()
-    const next = (n.pitch.alter ?? 0) === alter ? 0 : alter
-    const { step, octave } = n.pitch
-    n.pitch = next ? { step, octave, alter: next } : { step, octave }
-  }
-
-  /** Change la durée courante ; l'applique aussi à la note sélectionnée si elle tient. */
-  function setDuration(d: Duration) {
-    duration.value = d
-    applyDurationToSelected()
-  }
-  function toggleDot() {
-    dotted.value = !dotted.value
-    applyDurationToSelected()
-  }
-  function applyDurationToSelected() {
-    const n = selected.value
-    if (!n || !editingSelected.value) return
-    const want = { duration: duration.value, dots: (dotted.value ? 1 : 0) as 0 | 1 }
-    if (n.duration === want.duration && (n.dots ?? 0) === want.dots) return
-    snapshot()
-    n.duration = want.duration
-    if (want.dots) n.dots = 1
-    else delete n.dots
-  }
-
-  function selectAfter(staff: number, index: number) {
-    cursor.staff = Math.max(0, Math.min(score.value.staves.length - 1, staff))
-    cursor.index = Math.max(0, Math.min(notesOf(cursor.staff).length, index))
-    editingSelected.value = cursor.index > 0
-    syncPaletteFromSelected()
-  }
-  function syncPaletteFromSelected() {
-    const n = selected.value
-    if (!n) return
+  function syncPalette() {
+    const n = primary.value?.note
+    if (!n || n.point) return
     duration.value = n.duration
     dotted.value = !!n.dots
   }
-  function move(delta: number) {
-    selectAfter(cursor.staff, cursor.index + delta)
+  function tapElement(id: string) {
+    if (!multi.value) return selectOnly(id)
+    const has = selectedIds.value.includes(id)
+    selectedIds.value = has ? selectedIds.value.filter((x) => x !== id) : [...selectedIds.value, id]
   }
-  /** Change de portée en gardant à peu près la même position temporelle. */
+  function selectMeasure(staff: number, measure: number) {
+    const ids = (measuresOf(staff)[measure] ?? []).map((n) => n.id)
+    selectedIds.value = multi.value ? [...new Set([...selectedIds.value, ...ids])] : ids
+  }
+  function clearSelection() {
+    selectedIds.value = []
+  }
+
+  // --- saisie -------------------------------------------------------------------------------
+  function newPoint(pitch: Pitch): Note {
+    return { id: uid('n'), pitch: { ...pitch }, duration: 'q', point: true }
+  }
+  function placePoint(staff: number, measure: number, index: number, pitch: Pitch): Note {
+    snapshot()
+    const m = measuresOf(staff)[measure]
+    const note = newPoint(pitch)
+    m.splice(Math.max(0, Math.min(m.length, index)), 0, note)
+    selectedIds.value = [note.id]
+    return note
+  }
+
+  function insertPointAfterSelection(step: Step): Note {
+    const p = primary.value
+    let ref: number
+    let at: { staff: number; measure: number; index: number }
+    if (p) {
+      at = { staff: p.staff, measure: p.measure, index: p.index + 1 }
+      let back: Loc | null = p
+      while (back && !back.note.pitch) back = neighbour(back, -1)
+      ref = back?.note.pitch ? diatonicIndex(back.note.pitch) : centerIndex(score.value.staves[p.staff])
+    } else {
+      at = { staff: 0, measure: 0, index: 0 }
+      ref = centerIndex(score.value.staves[0])
+    }
+    return placePoint(at.staff, at.measure, at.index, fromDiatonicIndex(nearestIndex(step, ref)))
+  }
+
+  function applyRhythm(fn: (n: Note) => void) {
+    const sel = selectedNotes()
+    if (!sel.length) return
+    snapshot()
+    sel.forEach((l) => fn(l.note))
+    if (sel.length === 1) {
+      const next = neighbour(sel[0], 1)
+      if (next) selectedIds.value = [next.note.id]
+    }
+  }
+  const setNoteDuration = (n: Note) => {
+    n.duration = duration.value
+    if (dotted.value) n.dots = 1
+    else delete n.dots
+    delete n.point
+  }
+  function setDuration(d: Duration) {
+    duration.value = d
+    applyRhythm(setNoteDuration)
+  }
+  function toggleDot() {
+    dotted.value = !dotted.value
+    const sel = selectedNotes()
+    if (!sel.length) return
+    snapshot()
+    sel.forEach((l) => setNoteDuration(l.note)) // le point modifie la note, sans avancer
+  }
+  function toRest() {
+    applyRhythm((n) => {
+      n.pitch = null
+      if (n.point) {
+        n.duration = duration.value
+        if (dotted.value) n.dots = 1
+        delete n.point
+      }
+    })
+  }
+
+  function editPitches(fn: (p: Pitch) => Pitch) {
+    const sel = selectedNotes().filter((l) => l.note.pitch)
+    if (!sel.length) return
+    snapshot()
+    sel.forEach((l) => (l.note.pitch = fn(l.note.pitch!)))
+  }
+  function transpose(degrees: number) {
+    editPitches((p) => {
+      const q = fromDiatonicIndex(diatonicIndex(p) + degrees)
+      return p.alter ? { ...q, alter: p.alter } : q
+    })
+  }
+  function setAlter(alter: Alter) {
+    const sel = selectedNotes().filter((l) => l.note.pitch)
+    const allSame = sel.every((l) => (l.note.pitch!.alter ?? 0) === alter)
+    editPitches(({ step, octave }) => (allSame || !alter ? { step, octave } : { step, octave, alter }))
+  }
+  function setPitch(id: string, pitch: Pitch) {
+    const l = locate(id)
+    if (!l) return
+    snapshot()
+    const wasRest = !l.note.pitch
+    l.note.pitch = { step: pitch.step, octave: pitch.octave, ...(pitch.alter ? { alter: pitch.alter } : {}) }
+    if (wasRest) delete l.note.point
+  }
+
+  function removeSelected() {
+    const sel = selectedNotes()
+    if (!sel.length) return
+    const p = primary.value!
+    const prev = neighbour(p, -1)
+    snapshot()
+    const ids = new Set(sel.map((l) => l.note.id))
+    score.value.staves.forEach((_, si) =>
+      measuresOf(si).forEach((m) => {
+        for (let k = m.length - 1; k >= 0; k--) if (ids.has(m[k].id)) m.splice(k, 1)
+      }),
+    )
+    selectedIds.value = prev && !ids.has(prev.note.id) ? [prev.note.id] : []
+  }
+
+  // --- lignes / chiffrage --------------------------------------------------------------------
+  function addLine() {
+    snapshot()
+    score.value.staves.forEach((_, si) => {
+      for (let k = 0; k < LINE_MEASURES; k++) measuresOf(si).push([])
+    })
+    score.value.measureCount = (score.value.measureCount ?? 0) + LINE_MEASURES
+  }
+  function removeLine(line: number) {
+    const count = score.value.measureCount ?? 0
+    if (count <= LINE_MEASURES) return
+    snapshot()
+    const removed = new Set<string>()
+    score.value.staves.forEach((_, si) =>
+      measuresOf(si)
+        .splice(line * LINE_MEASURES, LINE_MEASURES)
+        .forEach((m) => m.forEach((n) => removed.add(n.id))),
+    )
+    score.value.measureCount = count - LINE_MEASURES
+    selectedIds.value = selectedIds.value.filter((id) => !removed.has(id))
+  }
+  function setTimeSignature(ts: [number, number]) {
+    snapshot()
+    score.value.timeSignature = [ts[0], ts[1]]
+  }
+
+  // --- navigation ---------------------------------------------------------------------------
+  function move(delta: number) {
+    const p = primary.value
+    if (!p) {
+      const first = flat(0)[0]
+      if (first) selectOnly(first.note.id)
+      return
+    }
+    const n = neighbour(p, delta)
+    if (n) selectOnly(n.note.id)
+  }
+  /** Élément de la portée voisine qui commence au même endroit (même mesure, même rang ou le dernier avant). */
   function moveStaff(delta: number) {
-    const from = noteStarts(currentNotes.value)
-    const t = cursor.index > 0 ? from[cursor.index - 1] : -1
-    const target = cursor.staff + delta
+    const p = primary.value
+    if (!p) return
+    const target = p.staff + delta
     if (target < 0 || target >= score.value.staves.length) return
-    const starts = noteStarts(notesOf(target))
-    let index = 0
-    while (index < starts.length && starts[index] <= t + 1e-6) index++
-    selectAfter(target, index)
+    const ms = measuresOf(target)
+    for (let m = p.measure; m >= 0; m--) {
+      const list = ms[m] ?? []
+      if (!list.length) continue
+      const idx = m === p.measure ? Math.min(p.index, list.length - 1) : list.length - 1
+      return selectOnly(list[idx].id)
+    }
+    const first = flat(target)[0]
+    if (first) selectOnly(first.note.id)
   }
 
   return {
-    cursor,
-    editingSelected,
+    selectedIds,
+    multi,
     duration,
     dotted,
-    selected,
-    perMeasure,
+    primary,
     canUndo,
     canRedo,
-    insertNote,
-    insertRest,
-    removeSelected,
-    transposeSelected,
-    setAlter,
+    locate,
+    placePoint,
+    insertPointAfterSelection,
+    tapElement,
+    selectMeasure,
+    clearSelection,
     setDuration,
     toggleDot,
-    selectAfter,
+    toRest,
+    setAlter,
+    transpose,
+    setPitch,
+    removeSelected,
+    addLine,
+    removeLine,
+    setTimeSignature,
     move,
     moveStaff,
     undo,
