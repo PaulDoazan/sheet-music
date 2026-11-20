@@ -23,12 +23,17 @@ export interface Note {
   duration: Duration
   /** Note pointée (×1,5). */
   dots?: 0 | 1
+  /** Point posé dont le rythme n'est pas encore choisi (`duration` vaut alors 'q'). */
+  point?: true
 }
 
 export interface Voice {
   id: string
   name?: string
+  /** Jeu de lecture et StaffView. Vide pour les partitions de l'éditeur. */
   notes: Note[]
+  /** Éditeur : mesures explicites (source de vérité). */
+  measures?: Note[][]
 }
 
 export interface Staff {
@@ -49,5 +54,7 @@ export interface Score {
   bpm: number
   timeSignature: [number, number]
   staves: Staff[]
+  /** Éditeur : nombre de mesures, multiple de 4. */
+  measureCount?: number
   updatedAt?: number
 }
