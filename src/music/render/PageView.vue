@@ -4,6 +4,8 @@
  * - Toucher une zone vide d'une portée : aperçu de la note (glisser pour ajuster), posée au relâcher → `place`.
  * - Toucher un élément → `tapElement` ; glisser verticalement un élément sélectionné → `repitch`.
  * - Sélection multiple : toucher une zone vide → `tapMeasure`.
+ * - L'aperçu de pose est décalé à gauche du doigt (pour rester visible) ; la note est posée sous l'aperçu.
+ * - Glisser une barre de mesure intermédiaire → `resizeLine` (largeurs fixes, jamais adaptées au contenu).
  * - Défilement : molette, gouttière de gauche (noms des voix) ou deux doigts.
  * Le dessin VexFlow ne dépend que de la partition, de la largeur et du thème ; sélection/lecture = classes CSS.
  */
@@ -23,7 +25,7 @@ import {
   Voice as VexVoice,
 } from 'vexflow/bravura'
 import {
-  fillerRests,
+  keyAlter,
   LINE_MEASURES,
   measureBeats,
   measureFill,
@@ -33,7 +35,9 @@ import {
   type Pitch,
   type Score,
   type Staff,
+  VEX_KEY,
 } from '@/music/model'
+import { barsFromFractions, dragFractions, lineFractions } from './barDrag'
 import { LINE_SPACING } from './layout'
 import { MAX_STEP, MIN_STEP, pitchAtStep } from './pitchFromY'
 import { hitElement } from './hit'
@@ -45,16 +49,19 @@ const props = withDefaults(
     playingIds?: string[]
     mutedStaves?: boolean[]
     multi?: boolean
+    /** « Vérifier le rythme » : mesures incomplètes / trop pleines en rouge. */
+    checkRhythm?: boolean
   }>(),
-  { selectedIds: () => [], playingIds: () => [], mutedStaves: () => [], multi: false },
+  { selectedIds: () => [], playingIds: () => [], mutedStaves: () => [], multi: false, checkRhythm: false },
 )
 const emit = defineEmits<{
   place: [staff: number, measure: number, index: number, pitch: Pitch]
   tapElement: [id: string]
   repitch: [id: string, pitch: Pitch]
   tapMeasure: [staff: number, measure: number]
-  addLine: []
+  addLine: [at: number]
   removeLine: [line: number]
+  resizeLine: [line: number, fractions: number[]]
 }>()
 
 // --- géométrie (unités logiques VexFlow ; px = logique × scale) --------------------------------
@@ -63,7 +70,10 @@ const STAFF_GAP = 6 * LINE_SPACING
 const SYS_MARGIN = 4 * LINE_SPACING // au-dessus de la 1re portée / sous la dernière d'une ligne
 const SYS_GAP = 2 * LINE_SPACING
 const LEFT = 56 // gouttière des noms de voix
-const RIGHT = 26 // bouton de suppression de ligne
+const RIGHT = 26 // boutons d'insertion / suppression de ligne
+const MIN_MEASURE_W = 40 // largeur minimale d'une mesure (glisser de barre)
+const PREVIEW_OFFSET_PX = 44 // décalage de l'aperçu à gauche du doigt (px écran)
+const BAR_HIT_PX = 12 // tolérance pour attraper une barre (px écran)
 
 interface ElemBox {
   id: string
@@ -78,7 +88,15 @@ interface MeasureBox {
   x1: number
   top: number // y de la ligne du haut
   elems: ElemBox[]
-  over: boolean
+  /** Mesure incomplète ou trop pleine (points exclus). */
+  bad: boolean
+}
+interface LineGeo {
+  start: number // début des notes de la 1re mesure
+  end: number // fin de ligne
+  bars: number[] // 3 barres intermédiaires
+  top: number // haut de la 1re portée
+  bottom: number // bas de la dernière portée
 }
 
 const root = ref<HTMLDivElement>()
@@ -89,6 +107,7 @@ const scale = ref(1)
 const pageH = ref(0)
 const boxes = ref<MeasureBox[]>([])
 const lineTops = ref<{ top: number; height: number }[]>([])
+const lineGeo = ref<LineGeo[]>([])
 const theme = useTheme()
 
 const colors = computed(() => {
@@ -147,13 +166,15 @@ function draw() {
 
   const out: MeasureBox[] = []
   const tops: { top: number; height: number }[] = []
+  const geo: LineGeo[] = []
+  const key = score.keySignature ?? 0
   for (let line = 0; line < lines; line++) {
     const sysTop = line * (sysH + SYS_GAP)
     tops.push({ top: sysTop * s, height: sysH * s })
     const staffTops = staves.map((_, i) => sysTop + SYS_MARGIN + i * (STAFF_H + STAFF_GAP))
 
     // 1) éléments de chaque mesure
-    type Built = { voice: VexVoice; notes: StaveNote[]; model: (Note | null)[]; beams: Beam[]; over: boolean }
+    type Built = { voice: VexVoice; notes: StaveNote[]; model: (Note | null)[]; beams: Beam[]; bad: boolean }
     const rows: Built[][] = []
     for (let k = 0; k < LINE_MEASURES; k++) {
       const mi = line * LINE_MEASURES + k
@@ -176,10 +197,12 @@ function draw() {
                 clef: staff.clef,
                 auto_stem: true,
               })
-              const key = `${note.pitch.step}${note.pitch.octave}`
+              const pk = `${note.pitch.step}${note.pitch.octave}`
               const alter = note.pitch.alter ?? 0
-              if (alter !== (altered.get(key) ?? 0)) sn.addModifier(new Accidental(alter === 1 ? '#' : alter === -1 ? 'b' : 'n'), 0)
-              altered.set(key, alter)
+              // altération dessinée seulement si elle diffère de l'armure (ou de la précédente de la mesure)
+              const current = altered.get(pk) ?? keyAlter(key, note.pitch.step)
+              if (alter !== current) sn.addModifier(new Accidental(alter === 1 ? '#' : alter === -1 ? 'b' : 'n'), 0)
+              altered.set(pk, alter)
               sn.setLedgerLineStyle({ fillStyle: colors.value.ink, strokeStyle: colors.value.ink, lineWidth: 1.4 })
               if (note.point) sn.getStem()?.setVisibility(false)
             }
@@ -188,12 +211,11 @@ function draw() {
             notes.push(sn)
             model.push(note)
           }
-          const fillers =
-            fill.state === 'empty' ? [{ duration: 'w' as const }] : fill.state === 'under' ? fillerRests(pm - fill.used) : []
-          for (const f of fillers) {
-            const r = new StaveNote({ keys: [restKey(staff, f.duration)], duration: `${f.duration}r`, clef: staff.clef })
+          // pas de silences de remplissage : seule une mesure vide montre sa pause, centrée
+          if (fill.state === 'empty') {
+            const r = new StaveNote({ keys: [restKey(staff, 'w')], duration: 'wr', clef: staff.clef })
             r.setStyle({ fillStyle: colors.value.muted, strokeStyle: colors.value.muted })
-            if (fill.state === 'empty') r.setCenterAlignment(true)
+            r.setCenterAlignment(true)
             notes.push(r)
             model.push(null)
           }
@@ -204,29 +226,32 @@ function draw() {
           const beamable = notes.filter((_, j) => model[j]?.pitch && !model[j]?.point)
           const groups = score.timeSignature[1] === 8 ? [new Fraction(3, 8)] : [new Fraction(1, 4)]
           const beams = beamable.length > 1 ? Beam.generateBeams(beamable, { groups }) : []
-          return { voice, notes, model, beams, over: fill.state === 'over' }
+          return { voice, notes, model, beams, bad: fill.state === 'over' || fill.state === 'under' }
         }),
       )
     }
 
-    // 2) largeurs : proportionnelles au contenu, la ligne occupe toute la largeur
-    const weights = rows.map((row) => {
-      const f = new Formatter()
-      row.forEach((b) => f.joinVoices([b.voice]))
-      return Math.max(60, f.preCalculateMinTotalWidth(row.map((b) => b.voice)) * 1.25 + 20)
-    })
+    // 2) largeurs fixes (fractions choisies par glisser de barre, égales par défaut), jamais adaptées au contenu
+    const fr = lineFractions(score.lineWidths?.[line])
     const probe = staves.map((staff, si) => {
       const st = new Stave(LEFT, staffTops[si], 100, { space_above_staff_ln: 0, space_below_staff_ln: 0 })
       st.addClef(staff.clef, 'default', staff.clefOctave === -1 ? '8vb' : undefined)
+      if (key) st.addKeySignature(VEX_KEY[key])
       if (line === 0) st.addTimeSignature(ts)
       return st
     })
     const startOffset = Math.max(...probe.map((st) => st.getNoteStartX())) - LEFT
     const usable = logicalW - LEFT - RIGHT - startOffset
-    const sumW = weights.reduce((a, b) => a + b, 0)
+    geo.push({
+      start: LEFT + startOffset,
+      end: logicalW - RIGHT,
+      bars: barsFromFractions(fr, LEFT + startOffset, logicalW - RIGHT),
+      top: staffTops[0],
+      bottom: staffTops[n - 1] + STAFF_H,
+    })
     let x = LEFT
     rows.forEach((row, k) => {
-      const area = (usable * weights[k]) / sumW
+      const area = usable * fr[k]
       const sts =
         k === 0
           ? probe
@@ -260,7 +285,7 @@ function draw() {
           x0: x,
           x1: x + (start - x) + area,
           top: staffTops[si],
-          over: b.over,
+          bad: b.bad,
           elems: b.notes
             .map((sn, j) => {
               const note = b.model[j]
@@ -279,6 +304,7 @@ function draw() {
   }
   boxes.value = out
   lineTops.value = tops
+  lineGeo.value = geo
   applyClasses()
 }
 
@@ -302,7 +328,7 @@ function applyClasses() {
 
 const overlays = computed(() =>
   boxes.value
-    .filter((b) => b.over)
+    .filter((b) => b.bad && props.checkRhythm)
     .map((b) => ({
       key: `${b.staff}-${b.measure}`,
       left: b.x0 * scale.value,
@@ -325,14 +351,19 @@ const nameTags = computed(() =>
 // --- geste : pose / sélection / changement de hauteur -----------------------------------------
 interface Gesture {
   pointerId: number
-  kind: 'place' | 'element' | 'repitch' | 'measure'
-  box: MeasureBox
+  kind: 'place' | 'element' | 'repitch' | 'measure' | 'bar'
+  box?: MeasureBox
+  /** glisser de barre : ligne et barre (0…2) */
+  line?: number
+  bar?: number
   id?: string
   startY: number
   lx: number
   ly: number
 }
 const gesture = ref<Gesture | null>(null)
+const barGuide = ref<{ line: number; bar: number; x: number; fractions: number[] } | null>(null)
+const hoverBar = ref(false)
 const preview = ref<{ x: number; step: number; staff: number; top: number; cancelled: boolean } | null>(null)
 const pointers = new Map<number, { x: number; y: number }>()
 let pinchY: number | null = null
@@ -358,6 +389,27 @@ function hitBox(lx: number, ly: number, onlyStaffOf?: MeasureBox): MeasureBox | 
   return best
 }
 const stepAt = (box: MeasureBox, ly: number) => Math.round((ly - box.top) / (LINE_SPACING / 2))
+/** Barre intermédiaire sous le pointeur (dans la hauteur du système). */
+function barAt(lx: number, ly: number): { line: number; bar: number } | null {
+  const tol = BAR_HIT_PX / scale.value
+  for (let line = 0; line < lineGeo.value.length; line++) {
+    const g = lineGeo.value[line]
+    if (ly < g.top - LINE_SPACING || ly > g.bottom + LINE_SPACING) continue
+    let best = -1
+    let bd = tol
+    g.bars.forEach((bx, k) => {
+      const d = Math.abs(bx - lx)
+      if (d <= bd) {
+        bd = d
+        best = k
+      }
+    })
+    if (best >= 0) return { line, bar: best }
+  }
+  return null
+}
+/** Abscisse de l'aperçu : décalée à gauche du doigt. */
+const previewX = (lx: number) => lx - PREVIEW_OFFSET_PX / scale.value
 
 function onDown(e: PointerEvent) {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -369,6 +421,14 @@ function onDown(e: PointerEvent) {
     return
   }
   const { lx, ly } = toLogical(e)
+  const bar = barAt(lx, ly)
+  if (bar) {
+    canvas.value!.setPointerCapture(e.pointerId)
+    const g = lineGeo.value[bar.line]
+    gesture.value = { pointerId: e.pointerId, kind: 'bar', ...bar, startY: e.clientY, lx, ly }
+    barGuide.value = { ...bar, x: g.bars[bar.bar], fractions: dragFractions(g.bars, g.start, g.end, bar.bar, g.bars[bar.bar], MIN_MEASURE_W) }
+    return
+  }
   const box = hitBox(lx, ly)
   if (!box) return
   canvas.value!.setPointerCapture(e.pointerId)
@@ -378,8 +438,10 @@ function onDown(e: PointerEvent) {
   } else if (props.multi) {
     gesture.value = { pointerId: e.pointerId, kind: 'measure', box, startY: e.clientY, lx, ly }
   } else {
-    gesture.value = { pointerId: e.pointerId, kind: 'place', box, startY: e.clientY, lx, ly }
-    updatePreview(box, lx, ly)
+    const px = previewX(lx)
+    const pbox = hitBox(px, box.top + STAFF_H / 2, box) ?? box // même portée, mesure sous l'aperçu
+    gesture.value = { pointerId: e.pointerId, kind: 'place', box: pbox, startY: e.clientY, lx, ly }
+    updatePreview(pbox, px, ly)
   }
 }
 function avgY() {
@@ -398,7 +460,13 @@ function updatePreview(box: MeasureBox, lx: number, ly: number) {
   }
 }
 function onMove(e: PointerEvent) {
-  if (!pointers.has(e.pointerId)) return
+  if (!pointers.has(e.pointerId)) {
+    if (e.pointerType === 'mouse' && !gesture.value) {
+      const { lx, ly } = toLogical(e)
+      hoverBar.value = !!barAt(lx, ly)
+    }
+    return
+  }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
   if (pinchY != null && pointers.size > 1) {
     const y = avgY()
@@ -409,10 +477,18 @@ function onMove(e: PointerEvent) {
   const g = gesture.value
   if (!g || g.pointerId !== e.pointerId) return
   const { lx, ly } = toLogical(e)
+  if (g.kind === 'bar' && barGuide.value) {
+    const geo = lineGeo.value[g.line!]
+    const fractions = dragFractions(geo.bars, geo.start, geo.end, g.bar!, lx, MIN_MEASURE_W)
+    barGuide.value = { ...barGuide.value, fractions, x: barsFromFractions(fractions, geo.start, geo.end)[g.bar!] }
+    return
+  }
+  if (!g.box) return
   if (g.kind === 'place') {
-    const box = hitBox(lx, g.box.top + STAFF_H / 2, g.box) ?? g.box // même portée, mesure selon x
+    const px = previewX(lx)
+    const box = hitBox(px, g.box.top + STAFF_H / 2, g.box) ?? g.box // même portée, mesure sous l'aperçu
     g.box = box
-    updatePreview(box, lx, ly)
+    updatePreview(box, px, ly)
   } else if (g.kind === 'element' && g.id && props.selectedIds.includes(g.id) && Math.abs(e.clientY - g.startY) > 6) {
     g.kind = 'repitch'
   }
@@ -427,8 +503,16 @@ function onUp(e: PointerEvent) {
   const g = gesture.value
   if (!g || g.pointerId !== e.pointerId) return
   gesture.value = null
+  if (g.kind === 'bar') {
+    const guide = barGuide.value
+    barGuide.value = null
+    const geo = lineGeo.value[g.line!]
+    if (guide && geo && Math.abs(guide.x - geo.bars[g.bar!]) > 1) emit('resizeLine', g.line!, guide.fractions)
+    return
+  }
   const p = preview.value
   preview.value = null
+  if (!g.box) return
   const staff = props.score.staves[g.box.staff]
   if (g.kind === 'element' && g.id) emit('tapElement', g.id)
   else if (g.kind === 'measure') emit('tapMeasure', g.box.staff, g.box.measure)
@@ -445,8 +529,17 @@ function onCancel(e: PointerEvent) {
   if (gesture.value?.pointerId === e.pointerId) {
     gesture.value = null
     preview.value = null
+    barGuide.value = null
   }
 }
+
+const guideView = computed(() => {
+  const g = barGuide.value
+  const geo = g && lineGeo.value[g.line]
+  if (!g || !geo) return null
+  const s = scale.value
+  return { left: g.x * s, top: (geo.top - LINE_SPACING) * s, height: (geo.bottom - geo.top + 2 * LINE_SPACING) * s }
+})
 
 const previewView = computed(() => {
   const p = preview.value
@@ -513,7 +606,14 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
 })
 watch(
-  () => [props.score.staves, props.score.timeSignature, props.score.measureCount, colors.value],
+  () => [
+    props.score.staves,
+    props.score.timeSignature,
+    props.score.measureCount,
+    props.score.keySignature,
+    props.score.lineWidths,
+    colors.value,
+  ],
   () => nextTick(draw),
   { deep: true },
 )
@@ -535,7 +635,7 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
       <div
         ref="canvas"
         class="canvas"
-        :class="{ multi }"
+        :class="{ multi, 'on-bar': hoverBar || !!barGuide }"
         @pointerdown="onDown"
         @pointermove="onMove"
         @pointerup="onUp"
@@ -555,17 +655,35 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
       </div>
       <button
         v-for="(l, i) in lineTops"
+        :key="`add-${i}`"
+        type="button"
+        class="line-btn line-add"
+        :style="{ top: `${l.top + 2}px` }"
+        :aria-label="i === 0 ? 'Ajouter 4 mesures au début' : `Insérer 4 mesures avant la ligne ${i + 1}`"
+        :title="i === 0 ? 'Ajouter 4 mesures au début' : `Insérer 4 mesures avant la ligne ${i + 1}`"
+        @click="emit('addLine', i)"
+      >
+        <v-icon :icon="mdiPlus" size="16" />
+      </button>
+      <button
+        v-for="(l, i) in lineTops"
         v-show="lineTops.length > 1"
         :key="i"
         type="button"
-        class="line-del"
-        :style="{ top: `${l.top + 4}px` }"
+        class="line-btn line-del"
+        :style="{ top: `${l.top + 30}px` }"
         :aria-label="`Supprimer la ligne ${i + 1}`"
         :title="`Supprimer la ligne ${i + 1}`"
         @click="emit('removeLine', i)"
       >
         <v-icon :icon="mdiClose" size="16" />
       </button>
+      <div
+        v-if="guideView"
+        class="bar-guide"
+        :style="{ left: `${guideView.left}px`, top: `${guideView.top}px`, height: `${guideView.height}px` }"
+        aria-hidden="true"
+      />
       <template v-if="previewView">
         <span
           v-for="(y, k) in previewView.ledgers"
@@ -590,7 +708,7 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
       </template>
     </div>
     <div class="add-row">
-      <button type="button" class="bos-btn small add" @click="emit('addLine'); scrollToBottom()">
+      <button type="button" class="bos-btn small add" @click="emit('addLine', lineTops.length); scrollToBottom()">
         <v-icon :icon="mdiPlus" size="18" /> Ajouter 4 mesures
       </button>
     </div>
@@ -605,12 +723,20 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
 .page { position: relative; }
 .canvas { position: absolute; inset: 0; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
 .canvas.multi { cursor: pointer; }
+.canvas.on-bar { cursor: col-resize; }
+.bar-guide {
+  position: absolute; width: 3px; transform: translateX(-50%); background: var(--accent); border-radius: 2px;
+  pointer-events: none; z-index: 2; box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.18);
+}
 .canvas :deep(svg) { display: block; overflow: visible; }
 .canvas :deep(.is-selected path),
 .canvas :deep(.is-selected rect) { fill: var(--accent); stroke: var(--accent); }
 .canvas :deep(.is-playing path),
 .canvas :deep(.is-playing rect) { fill: var(--good); stroke: var(--good); }
-.over { position: absolute; background: rgba(var(--v-theme-error), 0.12); border-radius: 6px; pointer-events: none; }
+.over {
+  position: absolute; background: rgba(var(--v-theme-error), 0.16); border: 2px solid rgba(var(--v-theme-error), 0.7);
+  border-radius: 6px; pointer-events: none;
+}
 .gutter { position: absolute; left: 0; top: 0; bottom: 0; touch-action: pan-y; z-index: 1; }
 .name {
   position: absolute; left: 2px; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
@@ -618,11 +744,13 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
   background: var(--card); color: var(--ink-2); border: 1.5px solid var(--line);
 }
 .name.muted { text-decoration: line-through; opacity: 0.6; }
-.line-del {
+.line-btn {
   position: absolute; right: 2px; width: 26px; height: 26px; border-radius: 8px; border: 0; z-index: 1;
   background: transparent; color: var(--ink-2); display: grid; place-items: center; cursor: pointer; opacity: 0.6;
 }
-.line-del:hover { opacity: 1; color: var(--bad); background: var(--paper-2); }
+.line-btn:hover { opacity: 1; background: var(--paper-2); }
+.line-del:hover { color: var(--bad); }
+.line-add:hover { color: var(--accent); }
 .pv-head, .pv-ledger, .pv-label { position: absolute; pointer-events: none; z-index: 2; }
 .pv-head {
   transform: translate(-50%, -50%) rotate(-20deg); border-radius: 50%; background: var(--accent);
