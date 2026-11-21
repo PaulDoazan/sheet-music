@@ -164,3 +164,102 @@ describe('revue finale', () => {
     expect(desc()[0]).toEqual(['rq'])
   })
 })
+
+describe('éditeur v3 : armure, lignes, largeurs', () => {
+  it('un point posé prend l’altération de l’armure', () => {
+    const { score, ed, desc } = setup()
+    score.value.keySignature = 1
+    ed.placePoint(0, 0, 0, parsePitch('F4'))
+    ed.insertPointAfterSelection('C')
+    expect(desc()[0]).toEqual(['f#/4•', 'c/4•']) // octave la plus proche de F♯4
+  })
+
+  it('♮ force le naturel, ♯ rebascule vers l’armure', () => {
+    const { score, ed, desc } = setup()
+    score.value.keySignature = 1
+    ed.placePoint(0, 0, 0, parsePitch('F4'))
+    ed.setAlter(0)
+    expect(desc()[0]).toEqual(['f/4•'])
+    ed.setAlter(0)
+    expect(desc()[0]).toEqual(['f/4•'])
+    ed.setAlter(1)
+    expect(desc()[0]).toEqual(['f#/4•'])
+    ed.setAlter(1) // déjà ♯ : retour à l’armure (♯ ici)
+    expect(desc()[0]).toEqual(['f#/4•'])
+    ed.placePoint(0, 0, 1, parsePitch('C5'))
+    ed.setAlter(-1)
+    ed.setAlter(-1) // re-bascule : retour à l’armure (naturel)
+    expect(desc()[0]).toEqual(['f#/4•', 'c/5•'])
+  })
+
+  it('transposer et glisser suivent l’armure', () => {
+    const { score, ed, desc } = setup()
+    score.value.keySignature = 1
+    const n = ed.placePoint(0, 0, 0, parsePitch('E4'))
+    ed.transpose(1)
+    expect(desc()[0]).toEqual(['f#/4•'])
+    ed.transpose(1)
+    expect(desc()[0]).toEqual(['g/4•'])
+    ed.setAlter(1) // G♯ hors armure : garde son ♯ en transposant
+    ed.transpose(1)
+    expect(desc()[0]).toEqual(['a#/4•'])
+    ed.setPitch(n.id, parsePitch('F4')) // glisser : reprend l’armure
+    expect(desc()[0]).toEqual(['f#/4•'])
+  })
+
+  it('changer d’armure réarme les notes qui la suivaient, annulable', () => {
+    const { score, ed, desc } = setup()
+    score.value.keySignature = 1
+    ed.placePoint(0, 0, 0, parsePitch('F4'))
+    ed.placePoint(0, 0, 1, parsePitch('C5'))
+    ed.placePoint(0, 0, 2, parsePitch('F4'))
+    ed.setAlter(0) // F♮ explicite
+    ed.setKeySignature(2)
+    expect(score.value.keySignature).toBe(2)
+    expect(desc()[0]).toEqual(['f#/4•', 'c#/5•', 'f/4•'])
+    ed.undo()
+    expect(score.value.keySignature).toBe(1)
+    expect(desc()[0]).toEqual(['f#/4•', 'c/5•', 'f/4•'])
+  })
+
+  it('insère une ligne en haut ou au milieu ; les largeurs suivent leur ligne', () => {
+    const { score, ed, m } = setup()
+    ed.placePoint(0, 0, 0, parsePitch('G4'))
+    ed.addLine() // 2 lignes
+    ed.setLineWidths(0, [0.4, 0.2, 0.2, 0.2])
+    ed.addLine(0) // nouvelle ligne en tête
+    expect(score.value.measureCount).toBe(12)
+    expect(m(0)[0]).toEqual([])
+    expect(m(0)[4].length).toBe(1)
+    expect(m(3).length).toBe(12)
+    expect(score.value.lineWidths).toEqual([null, [0.4, 0.2, 0.2, 0.2], null])
+    ed.removeLine(0)
+    expect(score.value.lineWidths).toEqual([[0.4, 0.2, 0.2, 0.2], null])
+    expect(m(0)[0].length).toBe(1)
+    ed.undo()
+    ed.undo()
+    expect(score.value.measureCount).toBe(8)
+    expect(score.value.lineWidths).toEqual([[0.4, 0.2, 0.2, 0.2], null])
+    ed.undo() // avant setLineWidths
+    expect(score.value.lineWidths).toEqual([null, null])
+  })
+
+  it('setLineWidths normalise et rejette les valeurs invalides', () => {
+    const { score, ed } = setup()
+    ed.setLineWidths(0, [2, 1, 1, 0])
+    expect(score.value.lineWidths).toEqual([[0.5, 0.25, 0.25, 0]])
+    ed.setLineWidths(0, [NaN, 1, 1, 1])
+    expect(score.value.lineWidths).toEqual([[0.5, 0.25, 0.25, 0]])
+    ed.setLineWidths(5, [1, 1, 1, 1])
+    expect(score.value.lineWidths).toEqual([[0.5, 0.25, 0.25, 0]])
+  })
+
+  it('vérifier le rythme est un simple interrupteur, sans modifier la partition', () => {
+    const { score, ed } = setup()
+    const before = JSON.stringify(score.value)
+    expect(ed.checkRhythm.value).toBe(false)
+    ed.checkRhythm.value = true
+    expect(JSON.stringify(score.value)).toBe(before)
+    expect(ed.canUndo.value).toBe(false)
+  })
+})
