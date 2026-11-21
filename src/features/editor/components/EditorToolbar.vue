@@ -3,7 +3,9 @@ import {
   mdiArrowDownBold,
   mdiArrowUpBold,
   mdiBackspaceOutline,
+  mdiMetronome,
   mdiMusicAccidentalFlat,
+  mdiMusicAccidentalNatural,
   mdiMusicAccidentalSharp,
   mdiMusicNoteEighth,
   mdiMusicNoteHalf,
@@ -93,6 +95,16 @@ const alter = () => props.editor.primary.value?.note.pitch?.alter ?? 0
         type="button"
         class="tool"
         :disabled="!hasPitch()"
+        title="Bécarre (N)"
+        aria-label="Bécarre"
+        @click="editor.setAlter(0)"
+      >
+        <v-icon :icon="mdiMusicAccidentalNatural" size="22" />
+      </button>
+      <button
+        type="button"
+        class="tool"
+        :disabled="!hasPitch()"
         title="Monter (↑, ⇧↑ octave)"
         aria-label="Monter la note"
         @click="editor.transpose(1)"
@@ -112,6 +124,17 @@ const alter = () => props.editor.primary.value?.note.pitch?.alter ?? 0
     </div>
 
     <div class="group">
+      <button
+        type="button"
+        class="tool"
+        :class="{ on: editor.checkRhythm.value }"
+        :aria-pressed="editor.checkRhythm.value"
+        title="Vérifier le rythme : mesures incomplètes ou trop pleines en rouge"
+        aria-label="Vérifier le rythme"
+        @click="editor.checkRhythm.value = !editor.checkRhythm.value"
+      >
+        <v-icon :icon="mdiMetronome" size="20" />
+      </button>
       <button
         type="button"
         class="tool"

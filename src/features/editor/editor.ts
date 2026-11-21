@@ -7,7 +7,10 @@ import { computed, ref, type Ref } from 'vue'
 import {
   diatonicIndex,
   fromDiatonicIndex,
+  keyAlter,
   LINE_MEASURES,
+  rekeyPitch,
+  withKey,
   STEPS,
   type Alter,
   type Duration,
@@ -45,6 +48,8 @@ export function createScoreEditor(score: Ref<Score>) {
   const multi = ref(false)
   const duration = ref<Duration>('q')
   const dotted = ref(false)
+  /** « Vérifier le rythme » : signale en rouge les mesures fausses, ne modifie rien. */
+  const checkRhythm = ref(false)
   const undoStack: string[] = []
   const redoStack: string[] = []
   const historyVersion = ref(0)
@@ -71,6 +76,8 @@ export function createScoreEditor(score: Ref<Score>) {
       staves: score.value.staves,
       measureCount: score.value.measureCount,
       timeSignature: score.value.timeSignature,
+      keySignature: score.value.keySignature ?? null,
+      lineWidths: score.value.lineWidths ?? null,
       selectedIds: selectedIds.value,
     })
   function snapshot() {
@@ -84,6 +91,10 @@ export function createScoreEditor(score: Ref<Score>) {
     score.value.staves = s.staves
     score.value.measureCount = s.measureCount
     score.value.timeSignature = s.timeSignature
+    if (s.keySignature == null) delete score.value.keySignature
+    else score.value.keySignature = s.keySignature
+    if (s.lineWidths == null) delete score.value.lineWidths
+    else score.value.lineWidths = s.lineWidths
     selectedIds.value = s.selectedIds
   }
   function undo() {
@@ -140,8 +151,11 @@ export function createScoreEditor(score: Ref<Score>) {
   }
 
   // --- saisie -------------------------------------------------------------------------------
+  const key = () => score.value.keySignature ?? 0
+  /** Une hauteur venue du toucher ou du clavier (naturelle) prend l'altération de l'armure. */
+  const keyed = (p: Pitch): Pitch => (p.alter == null ? withKey(p, key()) : { ...p })
   function newPoint(pitch: Pitch): Note {
-    return { id: uid('n'), pitch: { ...pitch }, duration: 'q', point: true }
+    return { id: uid('n'), pitch: keyed(pitch), duration: 'q', point: true }
   }
   function placePoint(staff: number, measure: number, index: number, pitch: Pitch): Note {
     snapshot()
@@ -213,23 +227,27 @@ export function createScoreEditor(score: Ref<Score>) {
     snapshot()
     sel.forEach((l) => (l.note.pitch = fn(l.note.pitch!)))
   }
+  const make = (step: Step, octave: number, alter: number): Pitch => (alter ? { step, octave, alter: alter as Alter } : { step, octave })
+  /** Une note qui suit l'armure la suit encore ; une altération hors armure est conservée. */
   function transpose(degrees: number) {
     editPitches((p) => {
       const q = fromDiatonicIndex(diatonicIndex(p) + degrees)
-      return p.alter ? { ...q, alter: p.alter } : q
+      const followed = (p.alter ?? 0) === keyAlter(key(), p.step)
+      return make(q.step, q.octave, followed ? keyAlter(key(), q.step) : (p.alter ?? 0))
     })
   }
+  /** ♮ (0) force le naturel ; ♯/♭ basculent : si toute la sélection l'a déjà, retour à l'armure. */
   function setAlter(alter: Alter) {
     const sel = selectedNotes().filter((l) => l.note.pitch)
-    const allSame = sel.every((l) => (l.note.pitch!.alter ?? 0) === alter)
-    editPitches(({ step, octave }) => (allSame || !alter ? { step, octave } : { step, octave, alter }))
+    const allSame = alter !== 0 && sel.every((l) => (l.note.pitch!.alter ?? 0) === alter)
+    editPitches(({ step, octave }) => make(step, octave, allSame ? keyAlter(key(), step) : alter))
   }
   function setPitch(id: string, pitch: Pitch) {
     const l = locate(id)
     if (!l) return
     snapshot()
     const wasRest = !l.note.pitch
-    l.note.pitch = { step: pitch.step, octave: pitch.octave, ...(pitch.alter ? { alter: pitch.alter } : {}) }
+    l.note.pitch = withKey(pitch, key())
     if (wasRest) delete l.note.point
   }
 
@@ -249,17 +267,58 @@ export function createScoreEditor(score: Ref<Score>) {
   }
 
   // --- lignes / chiffrage --------------------------------------------------------------------
-  function addLine() {
+  const lineCount = () => Math.ceil((score.value.measureCount ?? 0) / LINE_MEASURES)
+  /** Largeurs alignées sur le nombre de lignes (null = égales). */
+  function widths(): (number[] | null)[] {
+    const w = [...(score.value.lineWidths ?? [])]
+    while (w.length < lineCount()) w.push(null)
+    return w.slice(0, lineCount())
+  }
+  /** Insère 4 mesures vides à toutes les voix avant la ligne `at` (par défaut : à la fin). */
+  function addLine(at?: number) {
+    const lines = lineCount()
+    const line = Math.max(0, Math.min(lines, at ?? lines))
     snapshot()
+    const w = widths()
     score.value.staves.forEach((_, si) => {
-      for (let k = 0; k < LINE_MEASURES; k++) measuresOf(si).push([])
+      const empty = Array.from({ length: LINE_MEASURES }, () => [] as Note[])
+      measuresOf(si).splice(line * LINE_MEASURES, 0, ...empty)
     })
+    w.splice(line, 0, null)
     score.value.measureCount = (score.value.measureCount ?? 0) + LINE_MEASURES
+    score.value.lineWidths = w
+  }
+  /** Largeurs des 4 mesures de la ligne (normalisées, somme 1). Ignore une saisie invalide. */
+  function setLineWidths(line: number, fractions: number[]) {
+    if (line < 0 || line >= lineCount() || fractions.length !== LINE_MEASURES) return
+    if (fractions.some((f) => !Number.isFinite(f) || f < 0)) return
+    const sum = fractions.reduce((a, b) => a + b, 0)
+    if (!(sum > 0)) return
+    snapshot()
+    const w = widths()
+    w[line] = fractions.map((f) => f / sum)
+    score.value.lineWidths = w
+  }
+  function setKeySignature(k: number) {
+    const to = Math.max(-4, Math.min(4, Math.round(k)))
+    const from = key()
+    if (to === from) return
+    snapshot()
+    score.value.staves.forEach((_, si) =>
+      measuresOf(si).forEach((m) =>
+        m.forEach((n) => {
+          if (n.pitch) n.pitch = rekeyPitch(n.pitch, from, to)
+        }),
+      ),
+    )
+    score.value.keySignature = to
   }
   function removeLine(line: number) {
     const count = score.value.measureCount ?? 0
     if (count <= LINE_MEASURES) return
     snapshot()
+    const w = widths()
+    w.splice(line, 1)
     const removed = new Set<string>()
     score.value.staves.forEach((_, si) =>
       measuresOf(si)
@@ -267,6 +326,7 @@ export function createScoreEditor(score: Ref<Score>) {
         .forEach((m) => m.forEach((n) => removed.add(n.id))),
     )
     score.value.measureCount = count - LINE_MEASURES
+    score.value.lineWidths = w
     selectedIds.value = selectedIds.value.filter((id) => !removed.has(id))
   }
   function setTimeSignature(ts: [number, number]) {
@@ -307,6 +367,7 @@ export function createScoreEditor(score: Ref<Score>) {
     multi,
     duration,
     dotted,
+    checkRhythm,
     primary,
     canUndo,
     canRedo,
@@ -325,6 +386,8 @@ export function createScoreEditor(score: Ref<Score>) {
     removeSelected,
     addLine,
     removeLine,
+    setLineWidths,
+    setKeySignature,
     setTimeSignature,
     move,
     moveStaff,

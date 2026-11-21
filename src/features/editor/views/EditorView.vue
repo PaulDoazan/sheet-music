@@ -14,7 +14,7 @@ import {
   mdiVolumeOff,
   mdiHeadphones,
 } from '@mdi/js'
-import { measureBeats, migrateScore, noteBeats, STEPS, timeline, type Pitch, type Score, type Step } from '@/music/model'
+import { KEY_OPTIONS, measureBeats, migrateScore, noteBeats, STEPS, timeline, type Pitch, type Score, type Step } from '@/music/model'
 import PageView from '@/music/render/PageView.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
@@ -123,7 +123,7 @@ function toStart() {
 
 // Toute modification de la partition (outils, clavier, annuler, chiffrage) arrête l'écoute.
 watch(
-  () => [score.value.staves, score.value.timeSignature, score.value.measureCount],
+  () => [score.value.staves, score.value.timeSignature, score.value.measureCount, score.value.keySignature],
   () => {
     if (playing.value) stopPlay()
   },
@@ -197,6 +197,7 @@ function onKey(e: KeyboardEvent) {
   else if (k === '.') editor.toggleDot()
   else if (k === '+') edit(() => editor.setAlter(1))
   else if (k === '-') edit(() => editor.setAlter(-1))
+  else if (k === 'n' || k === 'N') edit(() => editor.setAlter(0))
   else if (DURATION_KEYS[k.toLowerCase()] && !STEPS.includes(k.toUpperCase() as Step))
     editor.setDuration(DURATION_KEYS[k.toLowerCase()])
   else handled = false
@@ -317,6 +318,20 @@ const empty = computed(() => score.value.staves.every((s) => (s.voices[0].measur
               {{ tsKey(t) }}
             </button>
           </div>
+          <p class="kicker">Armure</p>
+          <div class="ts keys">
+            <button
+              v-for="o in KEY_OPTIONS"
+              :key="o.value"
+              type="button"
+              class="ts-btn mono"
+              :class="{ on: o.value === (score.keySignature ?? 0) }"
+              :aria-pressed="o.value === (score.keySignature ?? 0)"
+              @click="edit(() => editor.setKeySignature(o.value))"
+            >
+              {{ o.value === 0 ? '0' : o.label.replace(' ', '') }}
+            </button>
+          </div>
           <button class="bos-btn small export" type="button" @click="downloadMidi(score)">
             <v-icon :icon="mdiDownload" size="18" /> Exporter en MIDI
           </button>
@@ -337,11 +352,13 @@ const empty = computed(() => score.value.staves.every((s) => (s.voices[0].measur
           :playing-ids="playingIds"
           :muted-staves="effectiveMuted"
           :multi="editor.multi.value"
+          :check-rhythm="editor.checkRhythm.value"
           @place="onPlace"
           @tap-element="(id) => editor.tapElement(id)"
           @tap-measure="(st, m) => editor.selectMeasure(st, m)"
           @repitch="(id, p) => edit(() => editor.setPitch(id, p))"
-          @add-line="edit(() => editor.addLine())"
+          @add-line="(at) => edit(() => editor.addLine(at))"
+          @resize-line="(line, fr) => editor.setLineWidths(line, fr)"
           @remove-line="onRemoveLine"
         />
         <p v-if="empty" class="hint">Touche la portée pour poser une note, puis choisis son rythme.</p>
@@ -396,6 +413,8 @@ const empty = computed(() => score.value.staves.every((s) => (s.voices[0].measur
   flex: 1; height: 34px; border-radius: 9px; border: 2px solid var(--line); background: var(--paper);
   color: var(--ink); font-weight: 700; cursor: pointer;
 }
+.keys { display: grid; grid-template-columns: repeat(5, 1fr); }
+.keys .ts-btn { padding: 0; font-size: 0.85rem; }
 .ts-btn.on { border-color: var(--ink); background: var(--ink); color: var(--paper); }
 .export { margin-top: 4px; }
 .settings-foot { display: flex; gap: 8px; justify-content: flex-end; }

@@ -9,7 +9,7 @@ export type Alter = -1 | 0 | 1
 export interface Pitch {
   step: Step
   octave: number
-  /** -1 bémol, 1 dièse. Inutilisé dans le MVP (notes naturelles). */
+  /** -1 bémol, 1 dièse : altération réelle (armure comprise). */
   alter?: Alter
 }
 
@@ -56,5 +56,9 @@ export interface Score {
   staves: Staff[]
   /** Éditeur : nombre de mesures, multiple de 4. */
   measureCount?: number
+  /** Armure : −4…4 (positif = dièses). Absente = aucune. */
+  keySignature?: number
+  /** Éditeur : largeurs des 4 mesures de chaque ligne, en fractions (somme 1). null/absent = égales. */
+  lineWidths?: (number[] | null)[]
   updatedAt?: number
 }

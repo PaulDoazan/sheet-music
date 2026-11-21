@@ -4,7 +4,7 @@ Apprendre à lire la musique, puis écrire, écouter et exporter des partitions.
 
 **Brique 1 — Lecture de notes** : clé de Sol, de Fa ou les deux, 5 niveaux, 2 minutes pour nommer un maximum de notes (+1 juste, −1 fausse, score jamais négatif). Pensé d'abord pour mobile en paysage.
 
-**Brique 2 — Écriture** : partitions à 1–5 portées (chœur SATB, SSATB, mélodie, piano), présentées en lignes de 4 mesures (＋ pour en ajouter). On pose la mélodie en touchant la portée (aperçu, glisser pour ajuster), puis on donne le rythme aux points (ronde → double croche, enchaînement automatique). Dièses/bémols, sélection multiple, annuler/rétablir ; écoute à tempo réglable avec muet/solo par voix ; export MIDI. Sauvegarde automatique dans le navigateur.
+**Brique 2 — Écriture** : partitions à 1–5 portées (chœur SATB, SSATB, mélodie, piano), présentées en lignes de 4 mesures (＋ pour en ajouter en haut, entre deux lignes ou en bas ; barres de mesure déplaçables au doigt). On pose la mélodie en touchant la portée (aperçu à gauche du doigt, glisser pour ajuster), puis on donne le rythme aux points (ronde → double croche, enchaînement automatique). Rien n'est corrigé automatiquement : « Vérifier le rythme » signale en rouge les mesures incomplètes ou trop pleines. Armure jusqu'à 4 ♯/♭, dièses/bémols/bécarres, sélection multiple, annuler/rétablir ; écoute à tempo réglable avec muet/solo par voix ; export MIDI. Sauvegarde automatique dans le navigateur.
 
 ▶ **Jouer / écrire** : https://pauldoazan.github.io/sheet-music/
 
@@ -26,7 +26,7 @@ npm run build      # typecheck + build dans dist/
 
 Clavier sur desktop : `C D E F G A B` ou `1`–`7`.
 
-Éditeur au clavier : `C`–`B` / `1`–`7` posent un point après la sélection, durées `W` ronde · `H` blanche · `Q` noire · `I` croche · `S` double, `.` point, `R` silence, `+`/`-` dièse/bémol, `↑`/`↓` hauteur (`⇧` octave), `←`/`→` élément précédent/suivant, `Alt ↑/↓` voix, `⌫` supprimer, `Échap` désélectionner, `Ctrl Z` / `Ctrl ⇧ Z`, `Espace` écouter.
+Éditeur au clavier : `C`–`B` / `1`–`7` posent un point après la sélection, durées `W` ronde · `H` blanche · `Q` noire · `I` croche · `S` double, `.` point, `R` silence, `+`/`-`/`N` dièse/bémol/bécarre, `↑`/`↓` hauteur (`⇧` octave), `←`/`→` élément précédent/suivant, `Alt ↑/↓` voix, `⌫` supprimer, `Échap` désélectionner, `Ctrl Z` / `Ctrl ⇧ Z`, `Espace` écouter.
 
 ## Organisation
 
