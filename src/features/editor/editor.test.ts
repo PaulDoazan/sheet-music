@@ -263,3 +263,13 @@ describe('éditeur v3 : armure, lignes, largeurs', () => {
     expect(ed.canUndo.value).toBe(false)
   })
 })
+
+describe('éditeur v3 : annuler sur une partition v2', () => {
+  it('n’ajoute pas armure ni largeurs à une partition qui n’en avait pas', () => {
+    const { score, ed } = setup()
+    ed.placePoint(0, 0, 0, parsePitch('G4'))
+    ed.undo()
+    expect('keySignature' in score.value).toBe(false)
+    expect('lineWidths' in score.value).toBe(false)
+  })
+})

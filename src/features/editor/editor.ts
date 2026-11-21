@@ -76,8 +76,8 @@ export function createScoreEditor(score: Ref<Score>) {
       staves: score.value.staves,
       measureCount: score.value.measureCount,
       timeSignature: score.value.timeSignature,
-      keySignature: score.value.keySignature ?? 0,
-      lineWidths: score.value.lineWidths ?? [],
+      keySignature: score.value.keySignature ?? null,
+      lineWidths: score.value.lineWidths ?? null,
       selectedIds: selectedIds.value,
     })
   function snapshot() {
@@ -91,8 +91,10 @@ export function createScoreEditor(score: Ref<Score>) {
     score.value.staves = s.staves
     score.value.measureCount = s.measureCount
     score.value.timeSignature = s.timeSignature
-    score.value.keySignature = s.keySignature
-    score.value.lineWidths = s.lineWidths
+    if (s.keySignature == null) delete score.value.keySignature
+    else score.value.keySignature = s.keySignature
+    if (s.lineWidths == null) delete score.value.lineWidths
+    else score.value.lineWidths = s.lineWidths
     selectedIds.value = s.selectedIds
   }
   function undo() {

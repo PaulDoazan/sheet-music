@@ -36,6 +36,7 @@ import {
   type Score,
   type Staff,
   VEX_KEY,
+  withKey,
 } from '@/music/model'
 import { barsFromFractions, dragFractions, lineFractions } from './barDrag'
 import { LINE_SPACING } from './layout'
@@ -74,6 +75,7 @@ const RIGHT = 26 // boutons d'insertion / suppression de ligne
 const MIN_MEASURE_W = 40 // largeur minimale d'une mesure (glisser de barre)
 const PREVIEW_OFFSET_PX = 44 // décalage de l'aperçu à gauche du doigt (px écran)
 const BAR_HIT_PX = 12 // tolérance pour attraper une barre (px écran)
+const BAR_DRAG_PX = 6 // glissement horizontal minimal avant de déplacer une barre (px écran)
 
 interface ElemBox {
   id: string
@@ -357,6 +359,7 @@ interface Gesture {
   line?: number
   bar?: number
   id?: string
+  startX?: number
   startY: number
   lx: number
   ly: number
@@ -417,22 +420,22 @@ function onDown(e: PointerEvent) {
     // deux doigts : on abandonne le geste et on fait défiler
     gesture.value = null
     preview.value = null
+    barGuide.value = null
     pinchY = avgY()
     return
   }
   const { lx, ly } = toLogical(e)
-  const bar = barAt(lx, ly)
+  const box = hitBox(lx, ly)
+  const hit = box && hitElement(box.elems, lx, ly)
+  // une note sous le doigt passe avant la barre (la 1re note d'une mesure est tout près de sa barre)
+  const bar = hit ? null : barAt(lx, ly)
   if (bar) {
     canvas.value!.setPointerCapture(e.pointerId)
-    const g = lineGeo.value[bar.line]
-    gesture.value = { pointerId: e.pointerId, kind: 'bar', ...bar, startY: e.clientY, lx, ly }
-    barGuide.value = { ...bar, x: g.bars[bar.bar], fractions: dragFractions(g.bars, g.start, g.end, bar.bar, g.bars[bar.bar], MIN_MEASURE_W) }
+    gesture.value = { pointerId: e.pointerId, kind: 'bar', ...bar, startX: e.clientX, startY: e.clientY, lx, ly }
     return
   }
-  const box = hitBox(lx, ly)
   if (!box) return
   canvas.value!.setPointerCapture(e.pointerId)
-  const hit = hitElement(box.elems, lx, ly)
   if (hit) {
     gesture.value = { pointerId: e.pointerId, kind: 'element', box, id: hit.id, startY: e.clientY, lx, ly }
   } else if (props.multi) {
@@ -477,10 +480,12 @@ function onMove(e: PointerEvent) {
   const g = gesture.value
   if (!g || g.pointerId !== e.pointerId) return
   const { lx, ly } = toLogical(e)
-  if (g.kind === 'bar' && barGuide.value) {
+  if (g.kind === 'bar') {
+    // on ne déplace la barre qu'au-delà d'un vrai glissement horizontal (un toucher ne change rien)
+    if (!barGuide.value && Math.abs(e.clientX - (g.startX ?? e.clientX)) < BAR_DRAG_PX) return
     const geo = lineGeo.value[g.line!]
     const fractions = dragFractions(geo.bars, geo.start, geo.end, g.bar!, lx, MIN_MEASURE_W)
-    barGuide.value = { ...barGuide.value, fractions, x: barsFromFractions(fractions, geo.start, geo.end)[g.bar!] }
+    barGuide.value = { line: g.line!, bar: g.bar!, fractions, x: barsFromFractions(fractions, geo.start, geo.end)[g.bar!] }
     return
   }
   if (!g.box) return
@@ -546,7 +551,7 @@ const previewView = computed(() => {
   if (!p) return null
   const s = scale.value
   const staff = props.score.staves[p.staff]
-  const pitch = pitchAtStep(staff.clef, staff.clefOctave ?? 0, p.step)
+  const pitch = withKey(pitchAtStep(staff.clef, staff.clefOctave ?? 0, p.step), props.score.keySignature)
   const ledgers: number[] = []
   for (let k = -2; k >= p.step; k -= 2) ledgers.push(k)
   for (let k = 10; k <= p.step; k += 2) ledgers.push(k)
@@ -554,7 +559,7 @@ const previewView = computed(() => {
     x: p.x * s,
     y: (p.top + (p.step * LINE_SPACING) / 2) * s,
     ledgers: ledgers.map((k) => (p.top + (k * LINE_SPACING) / 2) * s),
-    label: `${SOLFEGE[pitch.step]}${pitch.octave}`,
+    label: `${SOLFEGE[pitch.step]}${pitch.alter === 1 ? '♯' : pitch.alter === -1 ? '♭' : ''}${pitch.octave}`,
     cancelled: p.cancelled,
     s,
   }
