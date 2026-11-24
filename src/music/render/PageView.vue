@@ -40,7 +40,8 @@ import {
 } from '@/music/model'
 import { barsFromFractions, dragFractions, lineFractions } from './barDrag'
 import { LINE_SPACING } from './layout'
-import { MAX_STEP, MIN_STEP, pitchAtStep } from './pitchFromY'
+import { pitchAtStep } from './pitchFromY'
+import { ledgerSteps, resolveStep, stepAtY } from './placeGesture'
 import { hitElement } from './hit'
 
 const props = withDefaults(
@@ -391,7 +392,6 @@ function hitBox(lx: number, ly: number, onlyStaffOf?: MeasureBox): MeasureBox | 
   }
   return best
 }
-const stepAt = (box: MeasureBox, ly: number) => Math.round((ly - box.top) / (LINE_SPACING / 2))
 /** Barre intermédiaire sous le pointeur (dans la hauteur du système). */
 function barAt(lx: number, ly: number): { line: number; bar: number } | null {
   const tol = BAR_HIT_PX / scale.value
@@ -452,11 +452,10 @@ function avgY() {
   return ys.reduce((a, b) => a + b, 0) / ys.length
 }
 function updatePreview(box: MeasureBox, lx: number, ly: number) {
-  const step = stepAt(box, ly)
-  const cancelled = step < MIN_STEP - 6 || step > MAX_STEP + 6
+  const { step, cancelled } = resolveStep(stepAtY(ly, box.top))
   preview.value = {
     x: Math.max(box.x0 + 8, Math.min(box.x1 - 8, lx)),
-    step: Math.max(MIN_STEP, Math.min(MAX_STEP, step)),
+    step,
     staff: box.staff,
     top: box.top,
     cancelled,
@@ -552,9 +551,7 @@ const previewView = computed(() => {
   const s = scale.value
   const staff = props.score.staves[p.staff]
   const pitch = withKey(pitchAtStep(staff.clef, staff.clefOctave ?? 0, p.step), props.score.keySignature)
-  const ledgers: number[] = []
-  for (let k = -2; k >= p.step; k -= 2) ledgers.push(k)
-  for (let k = 10; k <= p.step; k += 2) ledgers.push(k)
+  const ledgers = ledgerSteps(p.step)
   return {
     x: p.x * s,
     y: (p.top + (p.step * LINE_SPACING) / 2) * s,
