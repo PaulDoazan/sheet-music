@@ -107,6 +107,6 @@ describe('dataTransfer', () => {
   })
 
   it('exportFileName', () => {
-    expect(exportFileName(new Date('2026-11-24T10:00:00'))).toBe('sheet-music-2026-11-24.json')
+    expect(exportFileName(new Date('2026-11-24T10:00:00'))).toBe('solfabox-2026-11-24.json')
   })
 })

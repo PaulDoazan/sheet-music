@@ -1,6 +1,6 @@
 {
-  "name": "Sheet Music — Lire et écrire la musique",
-  "short_name": "Sheet Music",
+  "name": "Solfabox — Lire et écrire la musique",
+  "short_name": "Solfabox",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
