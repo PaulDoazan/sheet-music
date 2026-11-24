@@ -1,0 +1,13 @@
+// Déploiement Cloudflare (Worker avec assets statiques) : sert le build Vite de `dist`.
+// Le build est lancé par Cloudflare (commande de build) avant `npx wrangler deploy`.
+{
+  "$schema": "https://unpkg.com/wrangler@4.167.0/config-schema.json",
+  "name": "sheet-music",
+  "compatibility_date": "2026-11-23",
+  "assets": {
+    "directory": "./dist",
+    // routeur en mode hash : toute autre URL renvoie l'app
+    "not_found_handling": "single-page-application"
+  },
+  "observability": { "enabled": true }
+}
