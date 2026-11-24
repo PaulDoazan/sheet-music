@@ -6,7 +6,7 @@ import { diatonicIndex, parsePitch, SOLFEGE, type Clef, type Step } from '@/musi
 import ScrollingStaff, { type TapeNote } from '@/music/render/ScrollingStaff.vue'
 import { extentForRange } from '@/music/render/layout'
 import { GAME_DURATION_MS, createReadingGame } from '../game'
-import { CLEF_MODES, isClefMode, isLevel, LEVEL_SPECS, type ClefMode, type Level } from '../levels'
+import { CLEF_MODES, loadSettings, playedClefs, recordKey, settingsFromQuery, settingsToQuery, summary } from '../settings'
 import TimelineBar from '../components/TimelineBar.vue'
 import ScoreGauge from '../components/ScoreGauge.vue'
 import NoteButtons from '../components/NoteButtons.vue'
@@ -16,11 +16,7 @@ import FullscreenToggle from '@/components/FullscreenToggle.vue'
 const route = useRoute()
 const router = useRouter()
 
-const clefMode = computed<ClefMode>(() => (isClefMode(route.query.clef) ? route.query.clef : 'treble'))
-const level = computed<Level>(() => {
-  const n = Number(route.query.level)
-  return isLevel(n) ? n : 1
-})
+const settings = computed(() => settingsFromQuery(route.query, loadSettings()))
 
 const game = createReadingGame()
 const { state } = game
@@ -34,9 +30,7 @@ const gauge = ref<InstanceType<typeof ScoreGauge>>()
 const buttons = ref<InstanceType<typeof NoteButtons>>()
 
 // ---------- partition affichée ----------
-const staffClefs = computed<Clef[]>(() =>
-  clefMode.value === 'both' ? ['treble', 'bass'] : [clefMode.value as Clef],
-)
+const staffClefs = computed<Clef[]>(() => playedClefs(settings.value.clefMode))
 
 const tapeNotes = computed<TapeNote[]>(() =>
   state.notes.map((n) => ({ id: n.id, clef: n.clef, pitch: n.pitch, style: n.status === 'pending' ? 'default' : n.status })),
@@ -44,7 +38,7 @@ const tapeNotes = computed<TapeNote[]>(() =>
 
 const extents = computed(() =>
   staffClefs.value.map((clef) => {
-    const r = LEVEL_SPECS[level.value].ranges[clef]
+    const r = settings.value.ranges[clef]
     return extentForRange(clef, diatonicIndex(parsePitch(r.low)), diatonicIndex(parsePitch(r.high)))
   }),
 )
@@ -72,7 +66,7 @@ function startGame() {
   timers.forEach(clearTimeout)
   timers = []
   document.querySelectorAll('.flying-note').forEach((el) => el.remove())
-  game.setup(clefMode.value, level.value)
+  game.setup(settings.value)
   gameNo.value++
   displayedScore.value = 0
   countdown.value = 3
@@ -138,7 +132,7 @@ function flyToGauge(noteId: string, ok: boolean, onArrive: () => void) {
 
 // ---------- fin de partie ----------
 const notesPerMin = computed(() => Math.round((state.correct + state.wrong) / (GAME_DURATION_MS / 60_000)))
-const modeLabel = computed(() => CLEF_MODES.find((m) => m.value === clefMode.value)?.label ?? '')
+const modeLabel = computed(() => CLEF_MODES.find((m) => m.value === settings.value.clefMode)?.label ?? '')
 watch(
   () => state.phase,
   (p) => {
@@ -147,7 +141,7 @@ watch(
 )
 
 function quit() {
-  router.push({ name: 'menu', query: { clef: clefMode.value, level: String(level.value) } })
+  router.push({ name: 'read', query: settingsToQuery(settings.value) })
 }
 
 onMounted(startGame)
@@ -156,7 +150,7 @@ onBeforeUnmount(() => {
   timers.forEach(clearTimeout)
   document.querySelectorAll('.flying-note').forEach((el) => el.remove())
 })
-watch([clefMode, level], startGame)
+watch(() => recordKey(settings.value), startGame)
 </script>
 
 <template>
@@ -193,7 +187,7 @@ watch([clefMode, level], startGame)
     <Transition name="results">
       <div v-if="state.phase === 'finished'" class="results-backdrop">
         <div class="results card" role="dialog" aria-labelledby="results-title">
-          <p class="kicker">{{ modeLabel }} · niveau {{ level }}</p>
+          <p class="kicker">{{ modeLabel }} · {{ summary(settings, true) }}</p>
           <h2 id="results-title">Temps écoulé !</h2>
           <div class="big-score mono">{{ state.score }}</div>
           <p v-if="state.newRecord" class="record">Nouveau record !</p>

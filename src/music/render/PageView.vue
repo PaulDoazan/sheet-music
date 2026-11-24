@@ -40,8 +40,10 @@ import {
 } from '@/music/model'
 import { barsFromFractions, dragFractions, lineFractions } from './barDrag'
 import { LINE_SPACING } from './layout'
-import { MAX_STEP, MIN_STEP, pitchAtStep } from './pitchFromY'
+import { pitchAtStep } from './pitchFromY'
+import { ledgerSteps, resolveStep, stepAtY } from './placeGesture'
 import { hitElement } from './hit'
+import PlacePreview from './PlacePreview.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -391,7 +393,6 @@ function hitBox(lx: number, ly: number, onlyStaffOf?: MeasureBox): MeasureBox | 
   }
   return best
 }
-const stepAt = (box: MeasureBox, ly: number) => Math.round((ly - box.top) / (LINE_SPACING / 2))
 /** Barre intermédiaire sous le pointeur (dans la hauteur du système). */
 function barAt(lx: number, ly: number): { line: number; bar: number } | null {
   const tol = BAR_HIT_PX / scale.value
@@ -452,11 +453,10 @@ function avgY() {
   return ys.reduce((a, b) => a + b, 0) / ys.length
 }
 function updatePreview(box: MeasureBox, lx: number, ly: number) {
-  const step = stepAt(box, ly)
-  const cancelled = step < MIN_STEP - 6 || step > MAX_STEP + 6
+  const { step, cancelled } = resolveStep(stepAtY(ly, box.top))
   preview.value = {
     x: Math.max(box.x0 + 8, Math.min(box.x1 - 8, lx)),
-    step: Math.max(MIN_STEP, Math.min(MAX_STEP, step)),
+    step,
     staff: box.staff,
     top: box.top,
     cancelled,
@@ -552,9 +552,7 @@ const previewView = computed(() => {
   const s = scale.value
   const staff = props.score.staves[p.staff]
   const pitch = withKey(pitchAtStep(staff.clef, staff.clefOctave ?? 0, p.step), props.score.keySignature)
-  const ledgers: number[] = []
-  for (let k = -2; k >= p.step; k -= 2) ledgers.push(k)
-  for (let k = 10; k <= p.step; k += 2) ledgers.push(k)
+  const ledgers = ledgerSteps(p.step)
   return {
     x: p.x * s,
     y: (p.top + (p.step * LINE_SPACING) / 2) * s,
@@ -689,28 +687,15 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
         :style="{ left: `${guideView.left}px`, top: `${guideView.top}px`, height: `${guideView.height}px` }"
         aria-hidden="true"
       />
-      <template v-if="previewView">
-        <span
-          v-for="(y, k) in previewView.ledgers"
-          :key="k"
-          class="pv-ledger"
-          :class="{ cancelled: previewView.cancelled }"
-          :style="{ left: `${previewView.x}px`, top: `${y}px`, width: `${22 * previewView.s}px` }"
-        />
-        <span
-          class="pv-head"
-          :class="{ cancelled: previewView.cancelled }"
-          :style="{
-            left: `${previewView.x}px`,
-            top: `${previewView.y}px`,
-            width: `${12 * previewView.s}px`,
-            height: `${9.5 * previewView.s}px`,
-          }"
-        />
-        <span class="pv-label mono" :class="{ cancelled: previewView.cancelled }" :style="{ left: `${previewView.x}px`, top: `${previewView.y}px` }">{{
-          previewView.cancelled ? 'annulé' : previewView.label
-        }}</span>
-      </template>
+      <PlacePreview
+        v-if="previewView"
+        :x="previewView.x"
+        :y="previewView.y"
+        :ledgers="previewView.ledgers"
+        :scale="previewView.s"
+        :label="previewView.label"
+        :cancelled="previewView.cancelled"
+      />
     </div>
     <div class="add-row">
       <button type="button" class="bos-btn small add" @click="emit('addLine', lineTops.length); scrollToBottom()">
@@ -756,17 +741,6 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
 .line-btn:hover { opacity: 1; background: var(--paper-2); }
 .line-del:hover { color: var(--bad); }
 .line-add:hover { color: var(--accent); }
-.pv-head, .pv-ledger, .pv-label { position: absolute; pointer-events: none; z-index: 2; }
-.pv-head {
-  transform: translate(-50%, -50%) rotate(-20deg); border-radius: 50%; background: var(--accent);
-  box-shadow: 0 0 0 4px rgba(var(--v-theme-primary), 0.18);
-}
-.pv-ledger { height: 1.5px; transform: translate(-50%, -50%); background: var(--accent); }
-.pv-label {
-  transform: translate(-50%, calc(-100% - 14px)); padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 700;
-  background: var(--accent); color: #fff; white-space: nowrap;
-}
-.cancelled { background: var(--ink-2) !important; box-shadow: none !important; }
 .add-row { display: flex; justify-content: center; padding: 8px 0 14px; }
 .add { text-decoration: none; }
 </style>

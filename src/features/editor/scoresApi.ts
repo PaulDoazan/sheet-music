@@ -36,16 +36,19 @@ export const scoresApi = {
     return JSON.parse(raw) as Score
   },
   async save(score: Score): Promise<Score> {
-    const saved: Score = { ...score, updatedAt: Date.now() }
-    localStorage.setItem(scoreKey(saved.id), JSON.stringify(saved))
+    return scoresApi.put({ ...score, updatedAt: Date.now() })
+  },
+  /** Écrit la partition telle quelle (conserve `updatedAt`) : import de données. */
+  async put(score: Score): Promise<Score> {
+    localStorage.setItem(scoreKey(score.id), JSON.stringify(score))
     const summary: ScoreSummary = {
-      id: saved.id,
-      title: saved.title || 'Sans titre',
-      staves: saved.staves.length,
-      updatedAt: saved.updatedAt!,
+      id: score.id,
+      title: score.title || 'Sans titre',
+      staves: score.staves.length,
+      updatedAt: score.updatedAt ?? Date.now(),
     }
-    writeIndex([summary, ...readIndex().filter((s) => s.id !== saved.id)])
-    return saved
+    writeIndex([summary, ...readIndex().filter((s) => s.id !== score.id)])
+    return score
   },
   async remove(id: string): Promise<void> {
     localStorage.removeItem(scoreKey(id))

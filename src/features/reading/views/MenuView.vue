@@ -1,41 +1,64 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { mdiPencil, mdiPlay } from '@mdi/js'
+import { mdiArrowLeft, mdiPlay, mdiTune } from '@mdi/js'
 import { parsePitch, type Clef, type Score } from '@/music/model'
 import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
-import { CLEF_MODES, isClefMode, isLevel, LEVEL_SPECS, LEVELS, type ClefMode, type Level } from '../levels'
+import {
+  CLEF_MODES,
+  loadSettings,
+  saveSettings,
+  settingsFromQuery,
+  settingsToQuery,
+  summary,
+  type ClefMode,
+  type ReadingSettings,
+} from '../settings'
 import { getBestScore } from '../bestScores'
+import RangeDialog from '../components/RangeDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 
-const PREF_KEY = 'sheet-music:last-settings'
-function savedPrefs(): { clef?: unknown; level?: unknown } {
-  try {
-    return JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') ?? {}
-  } catch {
-    return {}
-  }
-}
-const prefs = savedPrefs()
-const qClef = route.query.clef ?? prefs.clef
-const qLevel = Number(route.query.level ?? prefs.level)
-const clefMode = ref<ClefMode>(isClefMode(qClef) ? qClef : 'treble')
-const level = ref<Level>(isLevel(qLevel) ? qLevel : 1)
-
-watch([clefMode, level], () => {
-  try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ clef: clefMode.value, level: level.value }))
-  } catch {
-    /* ignore */
-  }
+const settings = ref(settingsFromQuery(route.query, loadSettings()))
+const clefMode = computed({
+  get: () => settings.value.clefMode,
+  set: (v: ClefMode) => {
+    settings.value.clefMode = v
+  },
 })
 
-const best = computed(() => getBestScore(clefMode.value, level.value))
+// L'URL reflète toujours les réglages courants : sans ça, une requête périmée
+// (« Retour » depuis le jeu) écraserait au rechargement les réglages sauvegardés.
+const sameQuery = (a: Record<string, unknown>, b: Record<string, string>) =>
+  Object.keys(a).length === Object.keys(b).length && Object.entries(b).every(([k, v]) => a[k] === v)
+watch(
+  settings,
+  () => {
+    saveSettings(settings.value)
+    const q = settingsToQuery(settings.value)
+    if (!sameQuery(route.query, q)) router.replace({ query: q })
+  },
+  { deep: true, immediate: true },
+)
+// Requête modifiée pendant que la vue est montée (lien, navigation) : on l'applique.
+watch(
+  () => route.query,
+  (q) => {
+    const next = settingsFromQuery(q, settings.value)
+    if (!sameQuery(settingsToQuery(settings.value), settingsToQuery(next))) settings.value = next
+  },
+)
+
+const best = computed(() => getBestScore(settings.value))
+
+const rangeOpen = ref(false)
+function applyRange(s: ReadingSettings) {
+  settings.value = s
+}
 
 // Mini-portées d'illustration des cartes de clé (même composant que le jeu)
 const SAMPLE: Record<Clef, string[]> = { treble: ['G4', 'B4', 'D5'], bass: ['F3', 'D3', 'B2'] }
@@ -71,16 +94,17 @@ const miniExtents = (mode: ClefMode) =>
     : [{ above: 1, below: 1 }]
 
 function play() {
-  router.push({ name: 'play', query: { clef: clefMode.value, level: String(level.value) } })
+  router.push({ name: 'play', query: settingsToQuery(settings.value) })
 }
 </script>
 
 <template>
   <div class="menu">
     <header class="topbar">
-      <span class="brand"><BrandMark /><span>Sheet<em>·</em>Music</span></span>
+      <router-link :to="{ name: 'home' }" class="brand" aria-label="Accueil">
+        <v-icon :icon="mdiArrowLeft" size="20" /><BrandMark /><span>Lecture</span>
+      </router-link>
       <div class="topbar-actions">
-        <router-link :to="{ name: 'scores' }" class="bos-btn small write-link"><v-icon :icon="mdiPencil" size="18" /> Écrire</router-link>
         <FullscreenToggle /><ThemeToggle />
       </div>
     </header>
@@ -105,16 +129,13 @@ function play() {
           </div>
         </fieldset>
 
-        <fieldset>
-          <legend class="kicker">Niveau</legend>
-          <div class="levels">
-            <label v-for="l in LEVELS" :key="l" class="level" :class="{ active: level === l }">
-              <input v-model="level" type="radio" name="level" :value="l" class="sr-only" />
-              <span class="mono">{{ l }}</span>
-            </label>
-          </div>
-          <p class="level-label">{{ LEVEL_SPECS[level].label }}</p>
-        </fieldset>
+        <div class="notes-row">
+          <span class="kicker">Notes</span>
+          <span class="summary">{{ summary(settings) }}</span>
+          <button class="bos-btn small" type="button" @click="rangeOpen = true">
+            <v-icon :icon="mdiTune" size="18" /> Régler
+          </button>
+        </div>
 
         <div class="play-row">
           <span class="best">Record&nbsp;: <b class="mono">{{ best || '—' }}</b></span>
@@ -124,6 +145,8 @@ function play() {
         </div>
       </form>
     </main>
+
+    <RangeDialog v-model="rangeOpen" :settings="settings" @apply="applyRange" />
   </div>
 </template>
 
@@ -134,9 +157,7 @@ function play() {
 }
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
 .topbar-actions { display: flex; gap: 8px; }
-.write-link { text-decoration: none; }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
-.brand em { font-style: normal; font-weight: 400; color: var(--accent); margin: 0 0.12em; }
+.brand { color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
 
 .menu-main { display: grid; gap: 20px 32px; grid-template-columns: 1fr 1.25fr; align-items: center; }
 .hero h1 { font-size: clamp(2.2rem, 7vw, 4.4rem); }
@@ -158,15 +179,8 @@ legend { margin-bottom: 8px; }
 .clef-card.active span { color: var(--accent); }
 .mini { width: 100%; height: 64px; pointer-events: none; }
 
-.levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-.level {
-  display: grid; place-items: center; min-height: 44px; border-radius: 12px; cursor: pointer;
-  border: 2px solid var(--line); background: var(--paper); font-weight: 700; font-size: 1.1rem;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.level:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
-.level.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.level-label { margin: 6px 0 0; color: var(--ink-2); font-size: 0.9rem; }
+.notes-row { display: flex; align-items: center; gap: 10px; }
+.summary { flex: 1; min-width: 0; font-weight: 600; font-size: 0.92rem; }
 
 .play-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .best { color: var(--ink-2); }
@@ -181,7 +195,6 @@ legend { margin-bottom: 8px; }
   .menu-main { gap: 12px 24px; }
   .settings { gap: 8px; padding: 12px 14px; }
   .mini { height: 46px; }
-  .level { min-height: 38px; }
   .bos-btn.play { min-height: 44px; }
 }
 /* Portrait / étroit : une colonne */

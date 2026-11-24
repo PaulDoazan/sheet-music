@@ -28,7 +28,7 @@ const dateFmt = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyl
 <template>
   <div class="scores">
     <header class="topbar">
-      <router-link :to="{ name: 'menu' }" class="brand" aria-label="Accueil">
+      <router-link :to="{ name: 'home' }" class="brand" aria-label="Accueil">
         <v-icon :icon="mdiArrowLeft" size="20" /><BrandMark /><span>Écrire</span>
       </router-link>
       <div class="topbar-actions"><FullscreenToggle /><ThemeToggle /></div>
