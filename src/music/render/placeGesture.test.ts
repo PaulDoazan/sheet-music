@@ -18,6 +18,8 @@ describe('resolveStep', () => {
   })
   it('borne selon les bornes passées, annule selon MIN_STEP/MAX_STEP', () => {
     expect(resolveStep(3, -8, 1)).toEqual({ step: 1, cancelled: false })
+    // l'annulation ignore les bornes resserrées
+    expect(resolveStep(20, -8, 1)).toEqual({ step: 1, cancelled: false })
   })
 })
 

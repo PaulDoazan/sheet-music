@@ -1,14 +1,24 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { mdiPencil, mdiPlay } from '@mdi/js'
+import { mdiPencil, mdiPlay, mdiTune } from '@mdi/js'
 import { parsePitch, type Clef, type Score } from '@/music/model'
 import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
-import { CLEF_MODES, loadSettings, saveSettings, settingsFromQuery, settingsToQuery, type ClefMode } from '../settings'
+import {
+  CLEF_MODES,
+  loadSettings,
+  saveSettings,
+  settingsFromQuery,
+  settingsToQuery,
+  summary,
+  type ClefMode,
+  type ReadingSettings,
+} from '../settings'
 import { getBestScore } from '../bestScores'
+import RangeDialog from '../components/RangeDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,9 +31,34 @@ const clefMode = computed({
   },
 })
 
-watch(settings, () => saveSettings(settings.value), { deep: true })
+// L'URL reflète toujours les réglages courants : sans ça, une requête périmée
+// (« Retour » depuis le jeu) écraserait au rechargement les réglages sauvegardés.
+const sameQuery = (a: Record<string, unknown>, b: Record<string, string>) =>
+  Object.keys(a).length === Object.keys(b).length && Object.entries(b).every(([k, v]) => a[k] === v)
+watch(
+  settings,
+  () => {
+    saveSettings(settings.value)
+    const q = settingsToQuery(settings.value)
+    if (!sameQuery(route.query, q)) router.replace({ query: q })
+  },
+  { deep: true, immediate: true },
+)
+// Requête modifiée pendant que la vue est montée (lien, navigation) : on l'applique.
+watch(
+  () => route.query,
+  (q) => {
+    const next = settingsFromQuery(q, settings.value)
+    if (!sameQuery(settingsToQuery(settings.value), settingsToQuery(next))) settings.value = next
+  },
+)
 
 const best = computed(() => getBestScore(settings.value))
+
+const rangeOpen = ref(false)
+function applyRange(s: ReadingSettings) {
+  settings.value = s
+}
 
 // Mini-portées d'illustration des cartes de clé (même composant que le jeu)
 const SAMPLE: Record<Clef, string[]> = { treble: ['G4', 'B4', 'D5'], bass: ['F3', 'D3', 'B2'] }
@@ -93,6 +128,14 @@ function play() {
           </div>
         </fieldset>
 
+        <div class="notes-row">
+          <span class="kicker">Notes</span>
+          <span class="summary">{{ summary(settings) }}</span>
+          <button class="bos-btn small" type="button" @click="rangeOpen = true">
+            <v-icon :icon="mdiTune" size="18" /> Régler
+          </button>
+        </div>
+
         <div class="play-row">
           <span class="best">Record&nbsp;: <b class="mono">{{ best || '—' }}</b></span>
           <button class="bos-btn primary play" type="submit">
@@ -101,6 +144,8 @@ function play() {
         </div>
       </form>
     </main>
+
+    <RangeDialog v-model="rangeOpen" :settings="settings" @apply="applyRange" />
   </div>
 </template>
 
@@ -134,6 +179,9 @@ legend { margin-bottom: 8px; }
 .clef-card.active { border-color: var(--ink); box-shadow: 0 3px 0 var(--ink); background: var(--card); }
 .clef-card.active span { color: var(--accent); }
 .mini { width: 100%; height: 64px; pointer-events: none; }
+
+.notes-row { display: flex; align-items: center; gap: 10px; }
+.summary { flex: 1; min-width: 0; font-weight: 600; font-size: 0.92rem; }
 
 .play-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .best { color: var(--ink-2); }

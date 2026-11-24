@@ -43,6 +43,7 @@ import { LINE_SPACING } from './layout'
 import { pitchAtStep } from './pitchFromY'
 import { ledgerSteps, resolveStep, stepAtY } from './placeGesture'
 import { hitElement } from './hit'
+import PlacePreview from './PlacePreview.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -686,28 +687,15 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
         :style="{ left: `${guideView.left}px`, top: `${guideView.top}px`, height: `${guideView.height}px` }"
         aria-hidden="true"
       />
-      <template v-if="previewView">
-        <span
-          v-for="(y, k) in previewView.ledgers"
-          :key="k"
-          class="pv-ledger"
-          :class="{ cancelled: previewView.cancelled }"
-          :style="{ left: `${previewView.x}px`, top: `${y}px`, width: `${22 * previewView.s}px` }"
-        />
-        <span
-          class="pv-head"
-          :class="{ cancelled: previewView.cancelled }"
-          :style="{
-            left: `${previewView.x}px`,
-            top: `${previewView.y}px`,
-            width: `${12 * previewView.s}px`,
-            height: `${9.5 * previewView.s}px`,
-          }"
-        />
-        <span class="pv-label mono" :class="{ cancelled: previewView.cancelled }" :style="{ left: `${previewView.x}px`, top: `${previewView.y}px` }">{{
-          previewView.cancelled ? 'annulé' : previewView.label
-        }}</span>
-      </template>
+      <PlacePreview
+        v-if="previewView"
+        :x="previewView.x"
+        :y="previewView.y"
+        :ledgers="previewView.ledgers"
+        :scale="previewView.s"
+        :label="previewView.label"
+        :cancelled="previewView.cancelled"
+      />
     </div>
     <div class="add-row">
       <button type="button" class="bos-btn small add" @click="emit('addLine', lineTops.length); scrollToBottom()">
@@ -753,17 +741,6 @@ defineExpose({ ensureVisible, scrollToTop, scrollToBottom })
 .line-btn:hover { opacity: 1; background: var(--paper-2); }
 .line-del:hover { color: var(--bad); }
 .line-add:hover { color: var(--accent); }
-.pv-head, .pv-ledger, .pv-label { position: absolute; pointer-events: none; z-index: 2; }
-.pv-head {
-  transform: translate(-50%, -50%) rotate(-20deg); border-radius: 50%; background: var(--accent);
-  box-shadow: 0 0 0 4px rgba(var(--v-theme-primary), 0.18);
-}
-.pv-ledger { height: 1.5px; transform: translate(-50%, -50%); background: var(--accent); }
-.pv-label {
-  transform: translate(-50%, calc(-100% - 14px)); padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 700;
-  background: var(--accent); color: #fff; white-space: nowrap;
-}
-.cancelled { background: var(--ink-2) !important; box-shadow: none !important; }
 .add-row { display: flex; justify-content: center; padding: 8px 0 14px; }
 .add { text-decoration: none; }
 </style>
