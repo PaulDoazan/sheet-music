@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { mdiMusicNote, mdiPencil } from '@mdi/js'
+import { ref } from 'vue'
+import { mdiCogOutline, mdiMusicNote, mdiPencil } from '@mdi/js'
 import { parsePitch, type Clef, type Score } from '@/music/model'
 import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
+import SettingsDialog from '@/features/settings/SettingsDialog.vue'
+
+const settingsOpen = ref(false)
 
 // Mini-portées d'illustration (même motif que le menu Lecture)
 function miniScore(id: string, clef: Clef, pitches: string[], duration: 'q' | 'h'): Score {
@@ -33,8 +37,9 @@ const extents = [{ above: 1, below: 1 }]
     <header class="topbar">
       <span class="brand"><BrandMark /><span>Sheet<em>·</em>Music</span></span>
       <div class="topbar-actions">
-        <!-- Emplacement réservé aux réglages (Task 6) -->
-        <span id="home-settings-slot" class="settings-slot" />
+        <button class="bos-btn small round" type="button" aria-label="Réglages" title="Réglages" @click="settingsOpen = true">
+          <v-icon :icon="mdiCogOutline" size="20" />
+        </button>
         <FullscreenToggle /><ThemeToggle />
       </div>
     </header>
@@ -51,6 +56,7 @@ const extents = [{ above: 1, below: 1 }]
         <p>Écris, écoute, exporte</p>
       </router-link>
     </main>
+    <SettingsDialog v-model="settingsOpen" />
   </div>
 </template>
 
@@ -61,7 +67,6 @@ const extents = [{ above: 1, below: 1 }]
 }
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
-.settings-slot { display: contents; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
 .brand em { font-style: normal; font-weight: 400; color: var(--accent); margin: 0 0.12em; }
 
