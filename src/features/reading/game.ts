@@ -1,7 +1,7 @@
 import { computed, reactive } from 'vue'
 import type { Clef, Pitch, Step } from '@/music/model'
 import { generateNotes, type ExerciseNote, type Rng } from './generator'
-import type { ClefMode, Level } from './levels'
+import { DEFAULT_SETTINGS, type ReadingSettings } from './settings'
 import { getBestScore, saveBestScore } from './bestScores'
 
 export const GAME_DURATION_MS = 120_000
@@ -32,8 +32,7 @@ let noteSeq = 0
  */
 export function createReadingGame() {
   const state = reactive({
-    clefMode: 'treble' as ClefMode,
-    level: 1 as Level,
+    settings: structuredClone(DEFAULT_SETTINGS) as ReadingSettings,
     phase: 'idle' as Phase,
     /** Ruban de notes : celles déjà jouées restent (couleur), de nouvelles sont ajoutées au fil de l'eau. */
     notes: [] as PageNote[],
@@ -54,24 +53,23 @@ export function createReadingGame() {
     const n = state.correct + state.wrong
     return n ? Math.round((100 * state.correct) / n) : 0
   })
-  /** Objectif de la jauge : le record (clé, niveau), 30 par défaut. */
+  /** Objectif de la jauge : le record (selon les réglages), 30 par défaut. */
   const target = computed(() => Math.max(state.bestBefore, 30))
 
   function ensureAhead() {
     const missing = LOOKAHEAD - (state.notes.length - state.cursor)
     if (missing <= 0) return
     const fresh = generateNotes(
-      { clefMode: state.clefMode, level: state.level, count: missing, previous: history.slice(-4) },
+      { settings: state.settings, count: missing, previous: history.slice(-4) },
       rng,
     )
     history = [...history.slice(-4), ...fresh]
     state.notes.push(...fresh.map((n) => ({ ...n, id: `n${++noteSeq}`, status: 'pending' as NoteStatus })))
   }
 
-  function setup(clefMode: ClefMode, level: Level, random: Rng = Math.random) {
+  function setup(settings: ReadingSettings, random: Rng = Math.random) {
     Object.assign(state, {
-      clefMode,
-      level,
+      settings,
       notes: [],
       cursor: 0,
       phase: 'idle',
@@ -81,7 +79,7 @@ export function createReadingGame() {
       endsAt: 0,
       remainingMs: GAME_DURATION_MS,
       newRecord: false,
-      bestBefore: getBestScore(clefMode, level),
+      bestBefore: getBestScore(settings),
     })
     history = []
     rng = random
@@ -98,7 +96,7 @@ export function createReadingGame() {
     if (state.phase === 'finished') return
     state.phase = 'finished'
     state.remainingMs = 0
-    state.newRecord = saveBestScore(state.clefMode, state.level, state.score)
+    state.newRecord = saveBestScore(state.settings, state.score)
   }
 
   function tick(now = Date.now()) {

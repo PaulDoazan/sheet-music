@@ -7,35 +7,23 @@ import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
-import { CLEF_MODES, isClefMode, isLevel, LEVEL_SPECS, LEVELS, type ClefMode, type Level } from '../levels'
+import { CLEF_MODES, loadSettings, saveSettings, settingsFromQuery, settingsToQuery, type ClefMode } from '../settings'
 import { getBestScore } from '../bestScores'
 
 const route = useRoute()
 const router = useRouter()
 
-const PREF_KEY = 'sheet-music:last-settings'
-function savedPrefs(): { clef?: unknown; level?: unknown } {
-  try {
-    return JSON.parse(localStorage.getItem(PREF_KEY) ?? '{}') ?? {}
-  } catch {
-    return {}
-  }
-}
-const prefs = savedPrefs()
-const qClef = route.query.clef ?? prefs.clef
-const qLevel = Number(route.query.level ?? prefs.level)
-const clefMode = ref<ClefMode>(isClefMode(qClef) ? qClef : 'treble')
-const level = ref<Level>(isLevel(qLevel) ? qLevel : 1)
-
-watch([clefMode, level], () => {
-  try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ clef: clefMode.value, level: level.value }))
-  } catch {
-    /* ignore */
-  }
+const settings = ref(settingsFromQuery(route.query, loadSettings()))
+const clefMode = computed({
+  get: () => settings.value.clefMode,
+  set: (v: ClefMode) => {
+    settings.value.clefMode = v
+  },
 })
 
-const best = computed(() => getBestScore(clefMode.value, level.value))
+watch(settings, () => saveSettings(settings.value), { deep: true })
+
+const best = computed(() => getBestScore(settings.value))
 
 // Mini-portées d'illustration des cartes de clé (même composant que le jeu)
 const SAMPLE: Record<Clef, string[]> = { treble: ['G4', 'B4', 'D5'], bass: ['F3', 'D3', 'B2'] }
@@ -71,7 +59,7 @@ const miniExtents = (mode: ClefMode) =>
     : [{ above: 1, below: 1 }]
 
 function play() {
-  router.push({ name: 'play', query: { clef: clefMode.value, level: String(level.value) } })
+  router.push({ name: 'play', query: settingsToQuery(settings.value) })
 }
 </script>
 
@@ -103,17 +91,6 @@ function play() {
               <span>{{ m.label }}</span>
             </label>
           </div>
-        </fieldset>
-
-        <fieldset>
-          <legend class="kicker">Niveau</legend>
-          <div class="levels">
-            <label v-for="l in LEVELS" :key="l" class="level" :class="{ active: level === l }">
-              <input v-model="level" type="radio" name="level" :value="l" class="sr-only" />
-              <span class="mono">{{ l }}</span>
-            </label>
-          </div>
-          <p class="level-label">{{ LEVEL_SPECS[level].label }}</p>
         </fieldset>
 
         <div class="play-row">
@@ -158,16 +135,6 @@ legend { margin-bottom: 8px; }
 .clef-card.active span { color: var(--accent); }
 .mini { width: 100%; height: 64px; pointer-events: none; }
 
-.levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-.level {
-  display: grid; place-items: center; min-height: 44px; border-radius: 12px; cursor: pointer;
-  border: 2px solid var(--line); background: var(--paper); font-weight: 700; font-size: 1.1rem;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.level:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
-.level.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.level-label { margin: 6px 0 0; color: var(--ink-2); font-size: 0.9rem; }
-
 .play-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .best { color: var(--ink-2); }
 .best b { color: var(--ink); }
@@ -181,7 +148,6 @@ legend { margin-bottom: 8px; }
   .menu-main { gap: 12px 24px; }
   .settings { gap: 8px; padding: 12px 14px; }
   .mini { height: 46px; }
-  .level { min-height: 38px; }
   .bos-btn.play { min-height: 44px; }
 }
 /* Portrait / étroit : une colonne */

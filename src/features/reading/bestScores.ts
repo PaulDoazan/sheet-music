@@ -1,29 +1,35 @@
-import type { ClefMode, Level } from './levels'
+import { recordKey, type ReadingSettings } from './settings'
 
-const KEY = 'sheet-music:best-scores'
+// v2 : records par réglages (tessiture, saut) ; l'ancienne clé `best-scores` n'est plus lue.
+const KEY = 'sheet-music:records-v2'
 
-function readAll(): Record<string, number> {
+export function readRecords(): Record<string, number> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}')
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
   } catch {
     return {}
   }
 }
 
-export function getBestScore(mode: ClefMode, level: Level): number {
-  return readAll()[`${mode}-${level}`] ?? 0
-}
-
-/** Enregistre le score s'il bat le record ; renvoie true si nouveau record. */
-export function saveBestScore(mode: ClefMode, level: Level, score: number): boolean {
-  const all = readAll()
-  const k = `${mode}-${level}`
-  if (score <= (all[k] ?? 0)) return false
-  all[k] = score
+export function writeRecords(records: Record<string, number>): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(all))
+    localStorage.setItem(KEY, JSON.stringify(records))
   } catch {
     /* stockage indisponible : on ignore */
   }
+}
+
+export function getBestScore(s: ReadingSettings): number {
+  return readRecords()[recordKey(s)] ?? 0
+}
+
+/** Enregistre le score s'il bat le record ; renvoie true si nouveau record. */
+export function saveBestScore(s: ReadingSettings, score: number): boolean {
+  const all = readRecords()
+  const k = recordKey(s)
+  if (score <= (all[k] ?? 0)) return false
+  all[k] = score
+  writeRecords(all)
   return true
 }

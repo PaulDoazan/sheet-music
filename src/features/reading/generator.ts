@@ -1,5 +1,5 @@
 import { diatonicIndex, fromDiatonicIndex, parsePitch, type Clef, type Pitch } from '@/music/model'
-import { LEVEL_SPECS, type ClefMode, type Level } from './levels'
+import type { ReadingSettings } from './settings'
 
 export interface ExerciseNote {
   clef: Clef
@@ -28,38 +28,38 @@ function pickInt(rng: Rng, min: number, max: number): number {
 
 /**
  * Génère `count` notes en marche aléatoire, en continuant depuis `previous` si fourni.
- * - tessiture et saut max selon le niveau ;
+ * - tessiture (par clé) et saut max selon les réglages ;
  * - jamais deux fois la même note d'affilée ;
  * - en mode Sol + Fa, clé tirée au hasard (au plus 3 d'affilée sur la même) ; changer de clé = départ libre.
  */
 export function generateNotes(
-  opts: { clefMode: ClefMode; level: Level; count: number; previous?: ExerciseNote[] },
+  opts: { settings: ReadingSettings; count: number; previous?: ExerciseNote[] },
   rng: Rng = Math.random,
 ): ExerciseNote[] {
-  const spec = LEVEL_SPECS[opts.level]
+  const { clefMode, ranges, maxLeap } = opts.settings
   const history: ExerciseNote[] = [...(opts.previous ?? [])]
   const out: ExerciseNote[] = []
 
   for (let i = 0; i < opts.count; i++) {
     const last = history[history.length - 1]
     let clef: Clef
-    if (opts.clefMode !== 'both') {
-      clef = opts.clefMode
+    if (clefMode !== 'both') {
+      clef = clefMode
     } else {
       const run = trailingRun(history)
       if (last && run >= MAX_SAME_CLEF_RUN) clef = last.clef === 'treble' ? 'bass' : 'treble'
       else clef = rng() < 0.5 ? 'treble' : 'bass'
     }
 
-    const range = spec.ranges[clef]
+    const range = ranges[clef]
     const lo = diatonicIndex(parsePitch(range.low))
     const hi = diatonicIndex(parsePitch(range.high))
     let min = lo
     let max = hi
     const prevIdx = last && last.clef === clef ? diatonicIndex(last.pitch) : undefined
-    if (prevIdx !== undefined && Number.isFinite(spec.maxLeap)) {
-      min = Math.max(lo, prevIdx - spec.maxLeap)
-      max = Math.min(hi, prevIdx + spec.maxLeap)
+    if (prevIdx !== undefined && Number.isFinite(maxLeap)) {
+      min = Math.max(lo, prevIdx - maxLeap)
+      max = Math.min(hi, prevIdx + maxLeap)
     }
 
     let idx = pickInt(rng, min, max)
