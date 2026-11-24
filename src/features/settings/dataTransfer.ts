@@ -55,7 +55,7 @@ export function parseImport(text: string): { ok: true; file: ExportFile } | { ok
     return { ok: false, error: "Ce fichier n'est pas un JSON valide." }
   }
   if (!isObject(raw) || raw.app !== 'sheet-music') {
-    return { ok: false, error: "Ce fichier ne vient pas de Sheet Music." }
+    return { ok: false, error: "Ce fichier ne vient pas de Solfabox." }
   }
   if (raw.version !== 1) return { ok: false, error: 'Version de fichier non prise en charge.' }
   const scores = raw.scores ?? []
@@ -122,5 +122,5 @@ export async function applyImport(f: ExportFile): Promise<void> {
 
 export function exportFileName(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
-  return `sheet-music-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`
+  return `solfabox-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`
 }

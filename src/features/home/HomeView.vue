@@ -35,7 +35,7 @@ const extents = [{ above: 1, below: 1 }]
 <template>
   <div class="home">
     <header class="topbar">
-      <span class="brand"><BrandMark /><span>Sheet<em>·</em>Music</span></span>
+      <span class="brand"><BrandMark /><span>Solfa<em>box</em></span></span>
       <div class="topbar-actions">
         <button class="bos-btn small round" type="button" aria-label="Réglages" title="Réglages" @click="settingsOpen = true">
           <v-icon :icon="mdiCogOutline" size="20" />
@@ -68,7 +68,7 @@ const extents = [{ above: 1, below: 1 }]
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
-.brand em { font-style: normal; font-weight: 400; color: var(--accent); margin: 0 0.12em; }
+.brand em { font-style: normal; font-weight: 400; color: var(--accent); }
 
 .choices { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center; align-content: center; }
 .choice {

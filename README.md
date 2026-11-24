@@ -1,4 +1,4 @@
-# Sheet Music
+# Solfabox
 
 Apprendre à lire la musique, puis écrire, écouter et exporter des partitions.
 
