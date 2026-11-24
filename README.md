@@ -59,3 +59,22 @@ Design : [lecture](docs/superpowers/specs/2026-11-19-lecture-notes-mvp-design.md
 6. Rediriger `www` vers le domaine nu : **Rules** → **Redirect Rules** → règle « si le nom d'hôte est `www.<ton-domaine>`, rediriger vers `https://<ton-domaine>/`, code 301 » (l'enregistrement DNS `www` doit rester proxifié, nuage orange).
 7. **Migrer les données** (le stockage est local à chaque origine) : sur `pauldoazan.github.io/sheet-music`, ⚙ sur l'accueil → **Exporter** ; sur `https://<ton-domaine>/`, ⚙ → **Importer**.
 8. Plus tard, une fois les données migrées : remplacer le site GitHub Pages par une redirection vers le nouveau domaine.
+
+### Formulaire de contact
+
+Le bouton **Contact** de l'accueil envoie le message au Worker (`worker/`, route `/api/contact`), qui le fait suivre par e-mail via Cloudflare Email Routing. L'adresse de destination n'est jamais dans le code ni dans le site : c'est un secret du Worker. Anti-spam : Cloudflare Turnstile. Le formulaire ne fonctionne que sur le domaine Cloudflare (pas sur GitHub Pages).
+
+Mise en place, une fois :
+
+1. Zone `solfabox.app` → **Email** → **Email Routing** → **Enable** (ajoute les enregistrements MX/SPF), puis **Destination addresses** → ajouter l'adresse qui recevra les messages et cliquer le lien de confirmation reçu.
+2. **Turnstile** → **Add widget** : domaine `solfabox.app` (et `sheet-music.paul-doazan.workers.dev` si besoin), mode **Managed**. Noter la *site key* et la *secret key*.
+3. Définir les secrets du Worker (dashboard → Worker → **Settings** → **Variables and Secrets**, type *Secret*, ou `npx wrangler secret put <NOM>`) : `CONTACT_TO` (adresse de destination), `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET`.
+4. L'expéditeur est `contact@solfabox.app` (`vars.CONTACT_FROM` dans `wrangler.jsonc`). Tant que les secrets manquent, le formulaire répond « pas encore configuré ».
+
+En local : créer `.dev.vars` (ignoré par git) avec les clés de test Turnstile, puis `npm run build && npx wrangler dev` ; les mails envoyés sont écrits dans `.wrangler/tmp/email/`.
+
+```
+CONTACT_TO=dest@example.com
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+```
