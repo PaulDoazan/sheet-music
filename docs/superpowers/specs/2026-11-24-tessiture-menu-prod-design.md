@@ -47,7 +47,7 @@ interface ReadingSettings {
 ```
 - `ranges` garde **les deux clés** même en mode Sol seul, pour qu'on retrouve ses réglages Fa en changeant de mode.
 - **Valeurs par défaut (mon choix)** : celles de l'ancien niveau 1. Sol `E4–F5`, Fa `G2–A3`, saut = tierce (2).
-- **Plage autorisée** : celle de la pose dans l'éditeur, soit jusqu'à 4 lignes supplémentaires (`MIN_STEP`/`MAX_STEP` de `pitchFromY.ts`). Sol `C3–A6`, Fa `E1–C5`. Elle couvre exactement l'ancien niveau 5.
+- **Plage autorisée** : celle de la pose dans l'éditeur, soit jusqu'à 4 lignes supplémentaires (`MIN_STEP`/`MAX_STEP` de `pitchFromY.ts`). Sol `D3–G6`, Fa `F1–B4`. L'ancien niveau 5 (Sol `C3–A6`, Fa `E1–C5`) allait un peu plus loin : on garde la limite de l'éditeur, 4 lignes supplémentaires.
 - **Garde-fou (mon choix)** : grave < aiguë, d'au moins un degré. La règle est la même pour le glisser et pour ▲▼ : la note s'arrête à un degré de l'autre. Pendant le glisser, l'aperçu reste bloqué à cette limite. Les ▲▼ concernés sont désactivés. L'autre note ne bouge jamais toute seule.
 - **Saut max proposé (mon choix)** : pastilles `2de · 3ce · 4te · 5te · 6te · 7e · Octave · Libre`, soit 1…7 degrés ou Infinity. Même sémantique que l'actuel `maxLeap` (2 = tierce).
 - `levels.ts` disparaît. Le type `Level`, `LEVEL_SPECS`, `isLevel` et les libellés de niveau aussi. `CLEF_MODES`/`isClefMode` sont conservés (déplacés dans un `settings.ts`).

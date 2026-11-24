@@ -12,7 +12,7 @@
 
 ## Global Constraints
 - Uniquement des notes naturelles (pas d'altération) dans la tessiture.
-- Plage autorisée par clé = `MIN_STEP`…`MAX_STEP` de `src/music/render/pitchFromY.ts` (clé non octaviée) : Sol `C3–A6`, Fa `E1–C5`.
+- Plage autorisée par clé = `MIN_STEP`…`MAX_STEP` de `src/music/render/pitchFromY.ts` (clé non octaviée) : Sol `D3–G6`, Fa `F1–B4`.
 - Défauts : Sol `E4–F5`, Fa `G2–A3`, saut `2` (tierce).
 - Saut max : `1…7` degrés ou `Infinity` ; libellés `2de · 3ce · 4te · 5te · 6te · 7e · Octave · Libre`.
 - Garde-fou : grave ≤ aiguë − 1 degré ; la note déplacée bute, l'autre ne bouge jamais.
@@ -24,7 +24,7 @@
 
 ## Review Focus
 1. **Ancien `localStorage`** (`last-settings` au format `{clef, level}`, JSON corrompu, stockage indisponible) → l'app démarre sur les défauts (en gardant `clef` s'il est valide), sans exception. Test : Task 1.
-2. **URL forgée ou ancienne** (`?clef=treble&level=3`, `tl=Z9`, `tl=A6&th=C3` inversés, `leap=99`) → partie jouable avec réglages valides (paramètres invalides remplacés, tessiture inversée → derniers réglages/défauts). Test : Task 1.
+2. **URL forgée ou ancienne** (`?clef=treble&level=3`, `tl=Z9`, `tl=F5&th=E4` inversés, `leap=99`) → partie jouable avec réglages valides (paramètres invalides remplacés, tessiture inversée → derniers réglages/défauts). Test : Task 1.
 3. **Tessiture de 2 notes avec saut 2de** → le générateur alterne sans boucle infinie ni répétition. Test : Task 2.
 4. **Fichier d'import étranger ou partiellement invalide** (autre JSON, `app` absent, partition sans `id`) → message d'erreur, rien n'est écrit. Test : Task 6.
 5. **Glisser au-delà de l'autre note / hors portée** → la note bute à un degré de l'autre ; hors zone (au-delà de `MIN_STEP-6`/`MAX_STEP+6`), annulation et valeur inchangée. Test : Task 3 (fonctions pures) et Task 4 (`clampPick`).
@@ -46,7 +46,7 @@
   export interface PitchRange { low: string; high: string }        // 'E4'
   export interface ReadingSettings { clefMode: ClefMode; ranges: Record<Clef, PitchRange>; maxLeap: number }
   export const DEFAULT_SETTINGS: ReadingSettings
-  export const ALLOWED: Record<Clef, PitchRange>                    // { treble: C3–A6, bass: E1–C5 }
+  export const ALLOWED: Record<Clef, PitchRange>                    // { treble: D3–G6, bass: F1–B4 }
   export const LEAP_OPTIONS: { value: number; label: string }[]     // 1..7 + Infinity, libellés ci-dessus
   export function playedClefs(mode: ClefMode): Clef[]
   export function isValidRange(clef: Clef, r: PitchRange): boolean  // naturelles, dans ALLOWED, low < high
@@ -66,7 +66,7 @@
   - `settingsToQuery({clefMode:'treble', ranges:{treble:{low:'E4',high:'F5'}, bass:…}, maxLeap:2})` → `{ clef:'treble', tl:'E4', th:'F5', leap:'2' }` (pas de `bl/bh`).
   - `settingsFromQuery({clef:'both', tl:'A3', th:'C6', leap:'free'}, DEFAULT_SETTINGS)` → treble `A3–C6`, bass = fallback `G2–A3`, `maxLeap: Infinity`.
   - `settingsFromQuery({clef:'treble', level:'3'}, fb)` → `fb` avec `clefMode:'treble'`.
-  - Invalides : `tl:'Z9'` → fallback ; `tl:'A6', th:'C3'` → fallback pour la clé ; `tl:'C2'` (hors ALLOWED) → fallback ; `tl:'F#4'` → fallback ; `leap:'99'` et `leap:'0'` → `fb.maxLeap`.
+  - Invalides : `tl:'Z9'` → fallback ; `tl:'F5', th:'E4'` (inversés) → fallback pour la clé ; `tl:'C3'` (hors ALLOWED) → fallback ; `tl:'F#4'` → fallback ; `leap:'99'` et `leap:'0'` → `fb.maxLeap`.
   - `recordKey` : `'treble|E4-F5|2'`, `'bass|G2-A3|7'`, `'both|E4-F5|G2-A3|free'`.
   - `summary(DEFAULT_SETTINGS avec clefMode 'both')` → `'Sol Mi4–Fa5 · Fa Sol2–La3 · sauts ≤ tierce'` ; `maxLeap: Infinity` → `'… · sauts libres'`.
 
@@ -93,9 +93,9 @@
   createReadingGame().setup(settings: ReadingSettings, random?: Rng)  // state.settings remplace clefMode/level
   ```
 
-- [ ] **Step 1: Adapt tests.** `generator.test.ts` : la boucle par niveau devient une table de 5 réglages équivalents aux anciens niveaux (copier les plages/sauts de `levels.ts`, niveau 5 → `Infinity`), mêmes assertions. Ajouter :
+- [ ] **Step 1: Adapt tests.** `generator.test.ts` : la boucle par niveau devient une table de 5 réglages équivalents aux anciens niveaux (copier les plages/sauts de `levels.ts`, niveau 5 → `Infinity`, en ramenant ses bornes dans `ALLOWED` : Sol `D3–G6`, Fa `F1–B4`), mêmes assertions. Ajouter :
   - tessiture `E4–F4`, saut 1, 50 notes → toutes ∈ {E4, F4}, jamais deux identiques d'affilée ;
-  - saut `Infinity` sur `C3–A6` → au moins un saut > 7 degrés sur 400 notes (seed fixe) ;
+  - saut `Infinity` sur `D3–G6` → au moins un saut > 7 degrés sur 400 notes (seed fixe) ;
   - saut 7 sur tessiture `E4–G4` → reste dans la tessiture.
   `game.test.ts` : remplacer `setup('treble', 1, rng)` par `setup(settingsFor('treble'), rng)` (helper local). `bestScores.test.ts` : deux réglages différant seulement par le saut ont des records indépendants ; `saveBestScore` renvoie `true` puis `false` pour un score égal ; l'ancienne clé `sheet-music:best-scores` est ignorée.
 - [ ] **Step 2: Run** `npx vitest run src/features/reading` → FAIL.
@@ -161,9 +161,10 @@
   ```
 
 - [ ] **Step 1: Write the failing tests** (`rangeEdit.test.ts`)
-  - Sol `E4–F5`, `high` : `maxStep` = `stepOfPitch(A6)` (= `MIN_STEP`, -8) et `minStep` correspond à `F4` (un degré au-dessus de E4).
+  - Sol `E4–F5`, `high` : `{ minStep: -8 (G6, = MIN_STEP), maxStep: 7 (F4, un degré au-dessus de E4) }` (degrés croissants vers le grave).
+  - Sol `E4–F5`, `low` : `{ minStep: 1 (E5, un degré sous F5), maxStep: 16 (D3, = MAX_STEP) }`.
   - `nudge(treble, {low:'E4',high:'F4'}, 'low', 1)` → inchangé ; `canNudge(...)` → `false`.
-  - `nudge(treble, {low:'C3',high:'F5'}, 'low', -1)` → inchangé (butée de plage).
+  - `nudge(treble, {low:'D3',high:'F5'}, 'low', -1)` → inchangé (butée de plage).
   - `nudge(bass, {low:'G2',high:'A3'}, 'high', 1)` → `{ low:'G2', high:'B3' }`.
 - [ ] **Step 2: Run** `npx vitest run src/features/reading/rangeEdit.test.ts` → FAIL.
 - [ ] **Step 3: Implement `rangeEdit.ts`.**
