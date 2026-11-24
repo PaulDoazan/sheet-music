@@ -110,6 +110,7 @@ Paul veut ce bouton dans **les réglages de l'app**. Il n'existe pas encore d'é
 
 ## 8. Partie D — Mise en prod Cloudflare
 - **Hébergement** : Cloudflare Pages relié au dépôt GitHub `PaulDoazan/sheet-music`, avec un build à chaque push sur `main` et des aperçus automatiques sur les autres branches. Commande `npm test && npm run build`, dossier `dist`, Node 22 (fichier `.nvmrc`).
+- **Mise à jour du 2026-11-24** : le projet a été créé dans Cloudflare comme **Worker avec assets statiques** (c'est ce que propose aujourd'hui le tableau de bord), et non comme projet Pages. La config est versionnée dans `wrangler.jsonc` (`assets.directory: ./dist`, SPA). Le déploiement se fait par Workers Builds : build `npm test && npm run build`, puis `npx wrangler deploy`. `public/_headers` est pris en compte de la même façon.
 - **Chemin de base** : `base` vaut désormais `/` par défaut dans `vite.config.ts`, et la variable `VITE_BASE` reste possible. Le routeur reste en mode `#` : aucune réécriture côté serveur n'est nécessaire.
 - **Tests au build** : `npm test && npm run build` comme commande de build Cloudflare (mon choix), pour qu'un test cassé bloque la mise en prod.
 - **GitHub Pages, en deux temps** (décision de Paul : les données doivent suivre) :
