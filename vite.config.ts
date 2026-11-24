@@ -5,8 +5,8 @@ import vuetify from 'vite-plugin-vuetify'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
-  // GitHub Pages sert l'app sous /sheet-music/ ; surchargeable (ex. Dokploy) via VITE_BASE
-  base: process.env.VITE_BASE ?? '/sheet-music/',
+  // Cloudflare Pages sert l'app à la racine ; GitHub Pages (transitoire) la sert sous /sheet-music/ via VITE_BASE
+  base: process.env.VITE_BASE ?? '/',
   plugins: [vue(), vuetify({ autoImport: true })],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
