@@ -141,7 +141,7 @@ watch(
 )
 
 function quit() {
-  router.push({ name: 'menu', query: settingsToQuery(settings.value) })
+  router.push({ name: 'read', query: settingsToQuery(settings.value) })
 }
 
 onMounted(startGame)
