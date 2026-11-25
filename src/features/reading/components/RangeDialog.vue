@@ -1,10 +1,10 @@
 <script setup lang="ts">
-/** Modale « Notes travaillées » : tessiture par clé (mini-portées + ▲▼) et saut max. */
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { mdiChevronDown, mdiChevronUp, mdiClose } from '@mdi/js'
+/** Modale « Notes travaillées » : tessiture par clé (mini-portées + ▲▼), saut max et durée. */
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { mdiChevronDown, mdiChevronUp, mdiClose, mdiInfinity } from '@mdi/js'
 import { parsePitch, SOLFEGE, type Clef, type Pitch } from '@/music/model'
 import PitchPickerStaff from '@/music/render/PitchPickerStaff.vue'
-import { LEAP_OPTIONS, playedClefs, type ReadingSettings } from '../settings'
+import { DURATION_STEPS, durationLabel, LEAP_OPTIONS, playedClefs, type ReadingSettings } from '../settings'
 import { canNudge, nudge, stepLimits, type Bound } from '../rangeEdit'
 
 const props = defineProps<{ modelValue: boolean; settings: ReadingSettings }>()
@@ -19,9 +19,37 @@ const draft = ref(copy(props.settings))
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) draft.value = copy(props.settings)
+    if (open) {
+      draft.value = copy(props.settings)
+      if (Number.isFinite(draft.value.duration)) lastTimed.value = draft.value.duration
+    }
   },
 )
+
+// Durée : curseur à crans (30 s → 5 min) + bouton « sans limite »
+const lastTimed = ref(Number.isFinite(props.settings.duration) ? props.settings.duration : 60)
+const unlimited = computed(() => !Number.isFinite(draft.value.duration))
+const durIndex = computed({
+  get: () => Math.max(0, DURATION_STEPS.indexOf(lastTimed.value)),
+  set: (i: number) => {
+    lastTimed.value = DURATION_STEPS[i]
+    draft.value.duration = lastTimed.value // toucher le curseur repasse en partie chronométrée
+  },
+})
+// v-slider ne transmet ni nom ni valeur lisible à la poignée (role=slider) : on les pose nous-mêmes
+const durBox = ref<HTMLElement>()
+watch(
+  [durBox, lastTimed],
+  () => {
+    const thumb = durBox.value?.querySelector('[role="slider"]')
+    thumb?.setAttribute('aria-label', 'Durée de la partie')
+    thumb?.setAttribute('aria-valuetext', durationLabel(lastTimed.value))
+  },
+  { flush: 'post' },
+)
+function toggleUnlimited() {
+  draft.value.duration = unlimited.value ? lastTimed.value : Infinity
+}
 
 const CLEF_NAMES: Record<Clef, string> = { treble: 'Sol', bass: 'Fa' }
 const BOUNDS: Bound[] = ['low', 'high']
@@ -116,6 +144,7 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
       </div>
 
       <footer class="foot">
+        <div class="options">
         <div class="leap" role="radiogroup" aria-label="Saut max">
           <span class="kicker">Saut max</span>
           <button
@@ -130,6 +159,35 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
           >
             {{ o.label }}
           </button>
+        </div>
+        <div ref="durBox" class="duration" :class="{ off: unlimited }">
+          <span class="kicker">Durée</span>
+          <v-slider
+            v-model="durIndex"
+            class="dur-slider"
+            :min="0"
+            :max="DURATION_STEPS.length - 1"
+            :step="1"
+            show-ticks="always"
+            tick-size="4"
+            color="primary"
+            track-color="line"
+            density="compact"
+            hide-details
+          />
+          <b class="dur-val mono" aria-live="polite">{{ unlimited ? '∞' : durationLabel(draft.duration) }}</b>
+          <button
+            type="button"
+            class="chip infinite"
+            :class="{ active: unlimited }"
+            :aria-pressed="unlimited"
+            title="Sans limite de temps : pas de record"
+            @click="toggleUnlimited"
+          >
+            <v-icon :icon="mdiInfinity" size="18" /> Sans limite
+          </button>
+        </div>
+        <p v-if="unlimited" class="no-record">Sans limite de temps, aucun record n'est enregistré.</p>
         </div>
         <button class="bos-btn primary validate" type="button" @click="apply">Valider</button>
       </footer>
@@ -178,12 +236,24 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
 }
 
 .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.options { flex: 1 1 340px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.short .options { gap: 4px; }
 .leap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.leap .kicker { margin-right: 4px; }
+.leap .kicker { margin-right: 4px; min-width: 4.6em; }
 .chip {
   min-height: 34px; padding: 0 10px; border-radius: 999px; border: 1.5px solid var(--line);
   background: var(--paper); color: var(--ink); font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
 }
+.duration { display: flex; align-items: center; gap: 4px 8px; min-width: 0; flex-wrap: wrap; }
+.duration .kicker { min-width: 4.6em; }
+.dur-slider { flex: 1; min-width: 120px; margin: 0 4px; }
+.duration.off .dur-slider { opacity: 0.4; }
+.dur-slider :deep(.v-slider-track__tick) { background-color: var(--ink-2); opacity: 0.55; }
+.dur-slider :deep(.v-slider-track__tick--filled) { background-color: rgb(var(--v-theme-on-primary)); opacity: 0.9; }
+.dur-val { min-width: 4.6em; text-align: right; font-size: 0.95rem; }
+.duration.off .dur-val { font-size: 1.2rem; }
+.chip.infinite { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.no-record { margin: 0; color: var(--ink-2); font-size: 0.85rem; }
 .chip.active { border-color: var(--ink); background: var(--ink); color: var(--paper); }
 .chip:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .validate { min-width: 130px; }

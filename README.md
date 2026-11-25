@@ -78,3 +78,7 @@ CONTACT_TO=dest@example.com
 TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET=1x0000000000000000000000000000000AA
 ```
+
+## Crédits
+
+Son de piano : échantillons [Salamander Grand Piano](https://archive.org/details/SalamanderGrandPianoV3) d'Alexander Holm, sous licence [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/) (version MP3 diffusée par Tone.js), dans `public/audio/piano/`.

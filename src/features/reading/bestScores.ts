@@ -1,4 +1,4 @@
-import { recordKey, type ReadingSettings } from './settings'
+import { isTimed, recordKey, type ReadingSettings } from './settings'
 
 // v2 : records par réglages (tessiture, saut) ; l'ancienne clé `best-scores` n'est plus lue.
 const KEY = 'sheet-music:records-v2'
@@ -20,12 +20,15 @@ export function writeRecords(records: Record<string, number>): void {
   }
 }
 
+/** Record des réglages ; 0 en mode sans limite de temps (aucun record). */
 export function getBestScore(s: ReadingSettings): number {
+  if (!isTimed(s)) return 0
   return readRecords()[recordKey(s)] ?? 0
 }
 
 /** Enregistre le score s'il bat le record ; renvoie true si nouveau record. */
 export function saveBestScore(s: ReadingSettings, score: number): boolean {
+  if (!isTimed(s)) return false
   const all = readRecords()
   const k = recordKey(s)
   if (score <= (all[k] ?? 0)) return false

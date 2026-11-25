@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { GAME_DURATION_MS, LOOKAHEAD, createReadingGame } from './game'
+import { LOOKAHEAD, createReadingGame } from './game'
 import { seededRng } from './generator'
 import { STEPS, type Step } from '@/music/model'
 import { DEFAULT_SETTINGS, type ClefMode, type ReadingSettings } from './settings'
@@ -48,19 +48,49 @@ describe('createReadingGame', () => {
     expect(new Set(g.state.notes.map((n) => n.id)).size).toBe(g.state.notes.length)
   })
 
-  it('termine à 2 min et enregistre le record', () => {
+  it('sans limite : ne finit pas seul, Terminer calcule le temps joué, pas de record', () => {
     const g = createReadingGame()
-    g.setup(settingsFor('bass', 4), seededRng(3))
+    g.setup({ ...settingsFor('treble'), duration: Infinity }, seededRng(5))
     g.start(1000)
     g.answer(g.currentNote.value!.pitch.step)
-    g.tick(1000 + GAME_DURATION_MS - 1)
+    g.tick(1000 + 3_600_000)
     expect(g.state.phase).toBe('playing')
-    g.tick(1000 + GAME_DURATION_MS)
+    expect(g.state.elapsedMs).toBe(3_600_000)
+    g.finish(1000 + 90_000)
+    expect(g.state.phase).toBe('finished')
+    expect(g.state.elapsedMs).toBe(90_000)
+    expect(g.state.newRecord).toBe(false)
+    expect(localStorage.getItem('sheet-music:records-v2')).toBeNull()
+  })
+
+  it('dure 1 min par défaut', () => {
+    const g = createReadingGame()
+    g.setup(settingsFor('treble'), seededRng(1))
+    expect(g.durationMs.value).toBe(60_000)
+    expect(g.state.remainingMs).toBe(60_000)
+    g.start(0)
+    g.tick(59_999)
+    expect(g.state.phase).toBe('playing')
+    g.tick(60_000)
+    expect(g.state.phase).toBe('finished')
+  })
+
+  it('termine à la durée réglée et enregistre le record', () => {
+    const g = createReadingGame()
+    g.setup({ ...settingsFor('bass', 4), duration: 180 }, seededRng(3))
+    g.start(1000)
+    g.answer(g.currentNote.value!.pitch.step)
+    g.tick(1000 + 180_000 - 1)
+    expect(g.state.phase).toBe('playing')
+    g.tick(1000 + 180_000)
     expect(g.state.phase).toBe('finished')
     expect(g.state.newRecord).toBe(true)
     expect(g.answer('C')).toBeNull()
 
-    g.setup(settingsFor('bass', 4), seededRng(4))
+    g.setup({ ...settingsFor('bass', 4), duration: 180 }, seededRng(4))
     expect(g.state.bestBefore).toBe(1)
+    // record propre à la durée
+    g.setup({ ...settingsFor('bass', 4), duration: 60 }, seededRng(4))
+    expect(g.state.bestBefore).toBe(0)
   })
 })

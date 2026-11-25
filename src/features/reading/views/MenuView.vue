@@ -7,8 +7,11 @@ import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
+import SoundToggle from '@/components/SoundToggle.vue'
 import {
   CLEF_MODES,
+  durationWords,
+  isTimed,
   loadSettings,
   saveSettings,
   settingsFromQuery,
@@ -24,6 +27,10 @@ const route = useRoute()
 const router = useRouter()
 
 const settings = ref(settingsFromQuery(route.query, loadSettings()))
+const timed = computed(() => isTimed(settings.value))
+const lead = computed(() =>
+  timed.value ? `${durationWords(settings.value.duration)} pour en nommer un maximum.` : 'Sans limite de temps : à ton rythme, sans record.',
+)
 const clefMode = computed({
   get: () => settings.value.clefMode,
   set: (v: ClefMode) => {
@@ -105,14 +112,14 @@ function play() {
         <v-icon :icon="mdiArrowLeft" size="20" /><BrandMark /><span>Lecture</span>
       </router-link>
       <div class="topbar-actions">
-        <FullscreenToggle /><ThemeToggle />
+        <SoundToggle /><FullscreenToggle /><ThemeToggle />
       </div>
     </header>
 
     <main class="menu-main">
       <div class="hero">
         <h1>Lis les notes.</h1>
-        <p class="lead">Deux minutes pour en nommer un maximum. Une note juste&nbsp;: +1. Une&nbsp;fausse&nbsp;:&nbsp;−1.</p>
+        <p class="lead">{{ lead }} Une note juste&nbsp;: +1. Une&nbsp;fausse&nbsp;:&nbsp;−1.</p>
       </div>
 
       <form class="settings card" @submit.prevent="play">
@@ -138,7 +145,8 @@ function play() {
         </div>
 
         <div class="play-row">
-          <span class="best">Record&nbsp;: <b class="mono">{{ best || '—' }}</b></span>
+          <span v-if="timed" class="best">Record&nbsp;: <b class="mono">{{ best || '—' }}</b></span>
+          <span v-else class="best">Pas de record</span>
           <button class="bos-btn primary play" type="submit">
             <v-icon :icon="mdiPlay" size="22" /> Jouer
           </button>

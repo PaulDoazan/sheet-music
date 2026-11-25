@@ -25,12 +25,15 @@ export interface ReadingSettings {
   ranges: Record<Clef, PitchRange>
   /** Saut maximum entre deux notes, en degrés (1 = seconde) ; Infinity = libre. */
   maxLeap: number
+  /** Durée d'une partie, en secondes ; Infinity = sans limite (pas de record). */
+  duration: number
 }
 
 export const DEFAULT_SETTINGS: ReadingSettings = {
   clefMode: 'treble',
   ranges: { treble: { low: 'E4', high: 'F5' }, bass: { low: 'G2', high: 'A3' } },
   maxLeap: 2,
+  duration: 60,
 }
 
 function fmt(p: Pitch): string {
@@ -59,6 +62,36 @@ export const LEAP_OPTIONS: { value: number; label: string }[] = [
   { value: 7, label: 'Octave' },
   { value: Infinity, label: 'Libre' },
 ]
+
+/** Crans du curseur de durée : de 30 s à 5 min, toutes les 30 s. */
+export const DURATION_STEPS: number[] = Array.from({ length: 10 }, (_, i) => (i + 1) * 30)
+
+function isDuration(v: unknown): v is number {
+  return v === Infinity || (typeof v === 'number' && DURATION_STEPS.includes(v))
+}
+
+export function isTimed(s: ReadingSettings): boolean {
+  return Number.isFinite(s.duration)
+}
+
+/** « 30 s », « 1 min », « 1 min 30 », « sans limite ». */
+export function durationLabel(seconds: number): string {
+  if (!Number.isFinite(seconds)) return 'sans limite'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  if (!m) return `${s} s`
+  return s ? `${m} min ${String(s).padStart(2, '0')}` : `${m} min`
+}
+
+const NUMBERS = ['', 'Une', 'Deux', 'Trois', 'Quatre', 'Cinq']
+/** En toutes lettres pour le texte du menu : « Une minute trente », « Trente secondes ». */
+export function durationWords(seconds: number): string {
+  if (!Number.isFinite(seconds)) return 'Sans limite de temps'
+  const m = Math.floor(seconds / 60)
+  const half = seconds % 60 === 30
+  if (!m) return 'Trente secondes'
+  return `${NUMBERS[m] ?? m} minute${m > 1 ? 's' : ''}${half ? ' trente' : ''}`
+}
 
 function isLeap(v: unknown): v is number {
   return typeof v === 'number' && LEAP_OPTIONS.some((o) => o.value === v)
@@ -98,6 +131,7 @@ function cloneDefaults(): ReadingSettings {
     clefMode: DEFAULT_SETTINGS.clefMode,
     ranges: { treble: { ...DEFAULT_SETTINGS.ranges.treble }, bass: { ...DEFAULT_SETTINGS.ranges.bass } },
     maxLeap: DEFAULT_SETTINGS.maxLeap,
+    duration: DEFAULT_SETTINGS.duration,
   }
 }
 
@@ -126,17 +160,23 @@ export function loadSettings(): ReadingSettings {
     s.ranges.bass = validRange('bass', ranges.bass, s.ranges.bass)
     const leap = o.maxLeap === 'free' ? Infinity : o.maxLeap
     if (isLeap(leap)) s.maxLeap = leap
+    const dur = o.duration === 'free' ? Infinity : o.duration
+    if (isDuration(dur)) s.duration = dur
   } catch {
     /* stockage illisible ou corrompu : défauts */
   }
   return s
 }
 
+/** Forme stockable : JSON ne sait pas stocker Infinity, on écrit 'free'. */
+export function serializeSettings(s: ReadingSettings): Record<string, unknown> {
+  const free = (v: number) => (v === Infinity ? 'free' : v)
+  return { ...s, maxLeap: free(s.maxLeap), duration: free(s.duration) }
+}
+
 export function saveSettings(s: ReadingSettings): void {
   try {
-    // JSON ne sait pas stocker Infinity : 'free'.
-    const out = { ...s, maxLeap: s.maxLeap === Infinity ? 'free' : s.maxLeap }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(out))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeSettings(s)))
   } catch {
     /* stockage indisponible : on ignore */
   }
@@ -155,6 +195,7 @@ export function settingsToQuery(s: ReadingSettings): Record<string, string> {
     q.bh = s.ranges.bass.high
   }
   q.leap = s.maxLeap === Infinity ? 'free' : String(s.maxLeap)
+  q.dur = s.duration === Infinity ? 'free' : String(s.duration)
   return q
 }
 
@@ -175,17 +216,25 @@ export function settingsFromQuery(q: LocationQuery, fallback: ReadingSettings): 
   }
   const leapRaw = first(q.leap)
   const leap = leapRaw === 'free' ? Infinity : leapRaw === undefined ? NaN : Number(leapRaw)
+  const durRaw = first(q.dur)
+  const dur = durRaw === 'free' ? Infinity : Number(durRaw)
   return {
     clefMode: isClefMode(clef) ? clef : fallback.clefMode,
     ranges: { treble: range('treble', 'tl', 'th'), bass: range('bass', 'bl', 'bh') },
     maxLeap: isLeap(leap) ? leap : fallback.maxLeap,
+    duration: isDuration(dur) ? dur : fallback.duration,
   }
 }
 
-/** Clé de record : mode, tessitures jouées, saut. */
+/**
+ * Clé de record : mode, tessitures jouées, saut, durée (sans objet en mode sans limite : pas de record).
+ * Les parties de 2 min gardent l'ancienne clé (sans durée) : les records d'avant restent valables.
+ */
 export function recordKey(s: ReadingSettings): string {
   const parts = playedClefs(s.clefMode).map((c) => `${s.ranges[c].low}-${s.ranges[c].high}`)
-  return [s.clefMode, ...parts, s.maxLeap === Infinity ? 'free' : String(s.maxLeap)].join('|')
+  const key = [s.clefMode, ...parts, s.maxLeap === Infinity ? 'free' : String(s.maxLeap)]
+  if (s.duration !== 120) key.push(`${s.duration}s`)
+  return key.join('|')
 }
 
 function solfege(p: string): string {
@@ -200,5 +249,6 @@ export function summary(s: ReadingSettings, short = false): string {
   )
   if (s.maxLeap === Infinity) parts.push(short ? 'libres' : 'sauts libres')
   else parts.push(`${short ? '' : 'sauts '}≤ ${LEAP_NAMES[s.maxLeap - 1]}`)
+  parts.push(durationLabel(s.duration))
   return parts.join(' · ')
 }
