@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import { useTheme } from 'vuetify'
-import RotateHint from './components/RotateHint.vue'
 
 const theme = useTheme()
 watch(
@@ -13,7 +12,7 @@ watch(
 
 <template>
   <v-app>
+    <!-- L'invitation à tourner le téléphone n'apparaît que dans la partie et l'éditeur (RotateHint inline) -->
     <router-view />
-    <RotateHint v-if="$route.name !== 'play' && $route.name !== 'editor'" />
   </v-app>
 </template>
