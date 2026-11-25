@@ -25,6 +25,7 @@ describe('constantes', () => {
       clefMode: 'treble',
       ranges: { treble: { low: 'E4', high: 'F5' }, bass: { low: 'G2', high: 'A3' } },
       maxLeap: 2,
+      duration: 60,
     })
     expect(ALLOWED).toEqual({ treble: { low: 'D3', high: 'G6' }, bass: { low: 'F1', high: 'B4' } })
   })
@@ -63,13 +64,18 @@ describe('loadSettings / saveSettings', () => {
       clefMode: 'both',
       ranges: { treble: { low: 'A3', high: 'C6' }, bass: { low: 'C2', high: 'E4' } },
       maxLeap: Infinity,
+      duration: 180,
     }
     saveSettings(s)
     expect(localStorage.getItem(KEY)).toContain('"free"')
     expect(loadSettings()).toEqual(s)
   })
+  it('réglages enregistrés avant la durée → 1 min', () => {
+    localStorage.setItem(KEY, '{"clefMode":"bass","maxLeap":3}')
+    expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, clefMode: 'bass', maxLeap: 3, duration: 60 })
+  })
   it('valeurs invalides stockées → défauts champ par champ', () => {
-    localStorage.setItem(KEY, '{"clefMode":"both","ranges":{"treble":{"low":"F5","high":"E4"}},"maxLeap":99}')
+    localStorage.setItem(KEY, '{"clefMode":"both","ranges":{"treble":{"low":"F5","high":"E4"}},"maxLeap":99,"duration":45}')
     expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, clefMode: 'both' })
   })
 })
@@ -77,17 +83,18 @@ describe('loadSettings / saveSettings', () => {
 describe('query', () => {
   it('settingsToQuery ne garde que les clés jouées', () => {
     expect(settingsToQuery({ ...DEFAULT_SETTINGS, clefMode: 'treble', maxLeap: 2 })).toEqual({
-      clef: 'treble', tl: 'E4', th: 'F5', leap: '2',
+      clef: 'treble', tl: 'E4', th: 'F5', leap: '2', dur: '60',
     })
     expect(settingsToQuery({ ...both, maxLeap: Infinity })).toEqual({
-      clef: 'both', tl: 'E4', th: 'F5', bl: 'G2', bh: 'A3', leap: 'free',
+      clef: 'both', tl: 'E4', th: 'F5', bl: 'G2', bh: 'A3', leap: 'free', dur: '60',
     })
   })
   it('settingsFromQuery', () => {
-    expect(settingsFromQuery({ clef: 'both', tl: 'A3', th: 'C6', leap: 'free' }, fb)).toEqual({
+    expect(settingsFromQuery({ clef: 'both', tl: 'A3', th: 'C6', leap: 'free', dur: '300' }, fb)).toEqual({
       clefMode: 'both',
       ranges: { treble: { low: 'A3', high: 'C6' }, bass: { low: 'G2', high: 'A3' } },
       maxLeap: Infinity,
+      duration: 300,
     })
   })
   it('ancienne URL ?clef=treble&level=3', () => {
@@ -101,6 +108,9 @@ describe('query', () => {
     expect(settingsFromQuery({ leap: '99' }, fb).maxLeap).toBe(fb.maxLeap)
     expect(settingsFromQuery({ leap: '0' }, fb).maxLeap).toBe(fb.maxLeap)
     expect(settingsFromQuery({ clef: 'zzz' }, fb).clefMode).toBe(fb.clefMode)
+    expect(settingsFromQuery({ dur: '45' }, fb).duration).toBe(fb.duration)
+    expect(settingsFromQuery({ dur: 'abc' }, fb).duration).toBe(fb.duration)
+    expect(settingsFromQuery({}, { ...fb, duration: 180 }).duration).toBe(180)
   })
   it('valeur de query en tableau → première valeur', () => {
     expect(settingsFromQuery({ leap: ['3', '4'] }, fb).maxLeap).toBe(3)
@@ -109,14 +119,15 @@ describe('query', () => {
 
 describe('recordKey / summary', () => {
   it('recordKey', () => {
-    expect(recordKey({ ...fb, clefMode: 'treble', maxLeap: 2 })).toBe('treble|E4-F5|2')
-    expect(recordKey({ ...fb, clefMode: 'bass', maxLeap: 7 })).toBe('bass|G2-A3|7')
-    expect(recordKey({ ...both, maxLeap: Infinity })).toBe('both|E4-F5|G2-A3|free')
+    expect(recordKey({ ...fb, clefMode: 'treble', maxLeap: 2 })).toBe('treble|E4-F5|2|60s')
+    expect(recordKey({ ...fb, clefMode: 'bass', maxLeap: 7, duration: 30 })).toBe('bass|G2-A3|7|30s')
+    // 2 min : ancienne clé, les records d'avant la durée réglable restent valables
+    expect(recordKey({ ...both, maxLeap: Infinity, duration: 120 })).toBe('both|E4-F5|G2-A3|free')
   })
   it('summary', () => {
-    expect(summary(both)).toBe('Sol Mi4–Fa5 · Fa Sol2–La3 · sauts ≤ tierce')
-    expect(summary({ ...both, maxLeap: Infinity })).toBe('Sol Mi4–Fa5 · Fa Sol2–La3 · sauts libres')
-    expect(summary({ ...fb, clefMode: 'bass' })).toBe('Fa Sol2–La3 · sauts ≤ tierce')
-    expect(summary(both, true)).toBe('Sol Mi4–Fa5 · Fa Sol2–La3 · ≤ tierce')
+    expect(summary(both)).toBe('Sol Mi4–Fa5 · Fa Sol2–La3 · sauts ≤ tierce · 1 min')
+    expect(summary({ ...both, maxLeap: Infinity })).toBe('Sol Mi4–Fa5 · Fa Sol2–La3 · sauts libres · 1 min')
+    expect(summary({ ...fb, clefMode: 'bass', duration: 30 })).toBe('Fa Sol2–La3 · sauts ≤ tierce · 30 s')
+    expect(summary(both, true)).toBe('Sol Mi4–Fa5 · Fa Sol2–La3 · ≤ tierce · 1 min')
   })
 })

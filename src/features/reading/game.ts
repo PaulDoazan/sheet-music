@@ -4,7 +4,6 @@ import { generateNotes, type ExerciseNote, type Rng } from './generator'
 import { DEFAULT_SETTINGS, type ReadingSettings } from './settings'
 import { getBestScore, saveBestScore } from './bestScores'
 
-export const GAME_DURATION_MS = 120_000
 
 export type NoteStatus = 'pending' | 'correct' | 'wrong'
 export interface PageNote {
@@ -41,7 +40,7 @@ export function createReadingGame() {
     wrong: 0,
     score: 0,
     endsAt: 0,
-    remainingMs: GAME_DURATION_MS,
+    remainingMs: DEFAULT_SETTINGS.duration * 1000,
     bestBefore: 0,
     newRecord: false,
   })
@@ -55,6 +54,8 @@ export function createReadingGame() {
   })
   /** Objectif de la jauge : le record (selon les réglages), 30 par défaut. */
   const target = computed(() => Math.max(state.bestBefore, 30))
+  /** Durée de la partie en cours, en ms. */
+  const durationMs = computed(() => state.settings.duration * 1000)
 
   function ensureAhead() {
     const missing = LOOKAHEAD - (state.notes.length - state.cursor)
@@ -77,7 +78,7 @@ export function createReadingGame() {
       wrong: 0,
       score: 0,
       endsAt: 0,
-      remainingMs: GAME_DURATION_MS,
+      remainingMs: settings.duration * 1000,
       newRecord: false,
       bestBefore: getBestScore(settings),
     })
@@ -88,8 +89,8 @@ export function createReadingGame() {
 
   function start(now = Date.now()) {
     state.phase = 'playing'
-    state.endsAt = now + GAME_DURATION_MS
-    state.remainingMs = GAME_DURATION_MS
+    state.endsAt = now + durationMs.value
+    state.remainingMs = durationMs.value
   }
 
   function finish() {
@@ -124,7 +125,7 @@ export function createReadingGame() {
     return { ok, note, index }
   }
 
-  return { state, currentNote, accuracy, target, setup, start, tick, answer, finish }
+  return { state, currentNote, accuracy, target, durationMs, setup, start, tick, answer, finish }
 }
 
 export type ReadingGame = ReturnType<typeof createReadingGame>

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-/** Modale « Notes travaillées » : tessiture par clé (mini-portées + ▲▼) et saut max. */
+/** Modale « Notes travaillées » : tessiture par clé (mini-portées + ▲▼), saut max et durée. */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { mdiChevronDown, mdiChevronUp, mdiClose } from '@mdi/js'
 import { parsePitch, SOLFEGE, type Clef, type Pitch } from '@/music/model'
 import PitchPickerStaff from '@/music/render/PitchPickerStaff.vue'
-import { LEAP_OPTIONS, playedClefs, type ReadingSettings } from '../settings'
+import { DURATION_OPTIONS, LEAP_OPTIONS, playedClefs, type ReadingSettings } from '../settings'
 import { canNudge, nudge, stepLimits, type Bound } from '../rangeEdit'
 
 const props = defineProps<{ modelValue: boolean; settings: ReadingSettings }>()
@@ -116,6 +116,7 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
       </div>
 
       <footer class="foot">
+        <div class="options">
         <div class="leap" role="radiogroup" aria-label="Saut max">
           <span class="kicker">Saut max</span>
           <button
@@ -130,6 +131,22 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
           >
             {{ o.label }}
           </button>
+        </div>
+        <div class="leap" role="radiogroup" aria-label="Durée">
+          <span class="kicker">Durée</span>
+          <button
+            v-for="o in DURATION_OPTIONS"
+            :key="o.value"
+            type="button"
+            role="radio"
+            class="chip"
+            :class="{ active: draft.duration === o.value }"
+            :aria-checked="draft.duration === o.value"
+            @click="draft.duration = o.value"
+          >
+            {{ o.label }}
+          </button>
+        </div>
         </div>
         <button class="bos-btn primary validate" type="button" @click="apply">Valider</button>
       </footer>
@@ -178,8 +195,10 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
 }
 
 .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.options { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.short .options { gap: 4px; }
 .leap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.leap .kicker { margin-right: 4px; }
+.leap .kicker { margin-right: 4px; min-width: 4.6em; }
 .chip {
   min-height: 34px; padding: 0 10px; border-radius: 999px; border: 1.5px solid var(--line);
   background: var(--paper); color: var(--ink); font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
