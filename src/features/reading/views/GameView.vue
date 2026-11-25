@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { mdiArrowLeft } from '@mdi/js'
+import { mdiArrowLeft, mdiFlagCheckered } from '@mdi/js'
 import { diatonicIndex, parsePitch, SOLFEGE, type Clef, type Step } from '@/music/model'
 import ScrollingStaff, { type TapeNote } from '@/music/render/ScrollingStaff.vue'
 import { extentForRange } from '@/music/render/layout'
 import { createReadingGame } from '../game'
-import { CLEF_MODES, loadSettings, playedClefs, recordKey, settingsFromQuery, settingsToQuery, summary } from '../settings'
+import { CLEF_MODES, isTimed, loadSettings, playedClefs, recordKey, settingsFromQuery, settingsToQuery, summary } from '../settings'
 import TimelineBar from '../components/TimelineBar.vue'
 import ScoreGauge from '../components/ScoreGauge.vue'
 import NoteButtons from '../components/NoteButtons.vue'
@@ -135,7 +135,10 @@ function flyToGauge(noteId: string, ok: boolean, onArrive: () => void) {
 }
 
 // ---------- fin de partie ----------
-const notesPerMin = computed(() => Math.round((state.correct + state.wrong) / (game.durationMs.value / 60_000)))
+const timed = computed(() => isTimed(state.settings))
+const notesPerMin = computed(() =>
+  state.elapsedMs > 0 ? Math.round((state.correct + state.wrong) / (state.elapsedMs / 60_000)) : 0,
+)
 const modeLabel = computed(() => CLEF_MODES.find((m) => m.value === settings.value.clefMode)?.label ?? '')
 watch(
   () => state.phase,
@@ -165,7 +168,17 @@ watch(() => recordKey(settings.value), startGame)
       <button class="bos-btn small round" type="button" aria-label="Retour au menu" @click="quit">
         <v-icon :icon="mdiArrowLeft" size="20" />
       </button>
-      <TimelineBar :remaining-ms="state.remainingMs" :total-ms="game.durationMs.value" />
+      <TimelineBar v-if="timed" :remaining-ms="state.remainingMs" :total-ms="game.durationMs.value" />
+      <div v-else class="free-head">
+        <button
+          class="bos-btn small"
+          type="button"
+          :disabled="state.phase !== 'playing'"
+          @click="game.finish()"
+        >
+          <v-icon :icon="mdiFlagCheckered" size="18" /> Terminer
+        </button>
+      </div>
       <ScoreGauge ref="gauge" :score="displayedScore" :target="game.target.value" />
       <SoundToggle />
       <FullscreenToggle />
@@ -195,9 +208,10 @@ watch(() => recordKey(settings.value), startGame)
       <div v-if="state.phase === 'finished'" class="results-backdrop">
         <div class="results card" role="dialog" aria-labelledby="results-title">
           <p class="kicker">{{ modeLabel }} · {{ summary(settings, true) }}</p>
-          <h2 id="results-title">Temps écoulé !</h2>
+          <h2 id="results-title">{{ timed ? 'Temps écoulé !' : 'Partie terminée' }}</h2>
           <div class="big-score mono">{{ state.score }}</div>
           <p v-if="state.newRecord" class="record">Nouveau record !</p>
+          <p v-else-if="!timed" class="best">Sans limite de temps : pas de record</p>
           <p v-else-if="state.bestBefore" class="best">Record : <b class="mono">{{ state.bestBefore }}</b></p>
           <ul class="stats">
             <li><b class="mono good">{{ state.correct }}</b> justes</li>
@@ -223,6 +237,8 @@ watch(() => recordKey(settings.value), startGame)
   max-width: 1100px; margin: 0 auto; width: 100%;
 }
 .game-head { display: flex; align-items: center; gap: 10px; }
+.free-head { flex: 1; display: flex; justify-content: center; }
+.free-head .bos-btn { gap: 6px; }
 .staff { position: relative; flex: 1; min-height: 0; padding: 4px 8px; overflow: hidden; }
 .countdown {
   position: absolute; inset: 0; display: grid; place-items: center; font-size: clamp(3rem, 14dvh, 6rem);
