@@ -1,7 +1,7 @@
 /** Export / import de toutes les données utilisateur (changement de domaine : localStorage est par origine). */
 import { scoresApi } from '@/features/editor/scoresApi'
 import { readRecords, writeRecords } from '@/features/reading/bestScores'
-import { loadSettings, saveSettings } from '@/features/reading/settings'
+import { loadSettings, saveSettings, serializeSettings } from '@/features/reading/settings'
 import type { Score } from '@/music/model'
 
 const THEME_KEY = 'sheet-music:theme'
@@ -37,8 +37,7 @@ export async function buildExport(): Promise<ExportFile> {
     exportedAt: new Date().toISOString(),
     scores,
     records: readRecords(),
-    // JSON ne sait pas stocker Infinity : même format que saveSettings
-    settings: { ...s, maxLeap: s.maxLeap === Infinity ? 'free' : s.maxLeap },
+    settings: serializeSettings(s),
   }
   const theme = readTheme()
   if (theme) file.theme = theme

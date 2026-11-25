@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ALLOWED,
   DEFAULT_SETTINGS,
+  DURATION_STEPS,
+  durationLabel,
+  durationWords,
+  isTimed,
   isValidRange,
   loadSettings,
   playedClefs,
@@ -114,6 +118,29 @@ describe('query', () => {
   })
   it('valeur de query en tableau → première valeur', () => {
     expect(settingsFromQuery({ leap: ['3', '4'] }, fb).maxLeap).toBe(3)
+  })
+})
+
+describe('durée', () => {
+  it('crans de 30 s à 5 min', () => {
+    expect(DURATION_STEPS).toEqual([30, 60, 90, 120, 150, 180, 210, 240, 270, 300])
+  })
+  it('libellés courts et en toutes lettres', () => {
+    expect([30, 60, 90, 300, Infinity].map(durationLabel)).toEqual(['30 s', '1 min', '1 min 30', '5 min', 'sans limite'])
+    expect([30, 60, 90, 120, 270, Infinity].map(durationWords)).toEqual([
+      'Trente secondes', 'Une minute', 'Une minute trente', 'Deux minutes', 'Quatre minutes trente', 'Sans limite de temps',
+    ])
+  })
+  it('sans limite : stockage, URL, résumé', () => {
+    const s: ReadingSettings = { ...DEFAULT_SETTINGS, duration: Infinity }
+    expect(isTimed(s)).toBe(false)
+    saveSettings(s)
+    expect(JSON.parse(localStorage.getItem(KEY)!).duration).toBe('free')
+    expect(loadSettings().duration).toBe(Infinity)
+    expect(settingsToQuery(s).dur).toBe('free')
+    expect(settingsFromQuery({ dur: 'free' }, fb).duration).toBe(Infinity)
+    expect(settingsFromQuery({ dur: '90' }, fb).duration).toBe(90)
+    expect(summary(s)).toBe('Sol Mi4–Fa5 · sauts ≤ tierce · sans limite')
   })
 })
 

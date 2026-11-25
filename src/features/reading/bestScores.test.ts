@@ -5,6 +5,13 @@ import { DEFAULT_SETTINGS } from './settings'
 describe('bestScores', () => {
   beforeEach(() => localStorage.clear())
 
+  it('sans limite de temps : aucun record lu ni écrit', () => {
+    const free = { ...DEFAULT_SETTINGS, duration: Infinity }
+    expect(saveBestScore(free, 50)).toBe(false)
+    expect(getBestScore(free)).toBe(0)
+    expect(readRecords()).toEqual({})
+  })
+
   it('0 par défaut', () => {
     expect(getBestScore(DEFAULT_SETTINGS)).toBe(0)
   })

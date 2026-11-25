@@ -48,6 +48,21 @@ describe('createReadingGame', () => {
     expect(new Set(g.state.notes.map((n) => n.id)).size).toBe(g.state.notes.length)
   })
 
+  it('sans limite : ne finit pas seul, Terminer calcule le temps joué, pas de record', () => {
+    const g = createReadingGame()
+    g.setup({ ...settingsFor('treble'), duration: Infinity }, seededRng(5))
+    g.start(1000)
+    g.answer(g.currentNote.value!.pitch.step)
+    g.tick(1000 + 3_600_000)
+    expect(g.state.phase).toBe('playing')
+    expect(g.state.elapsedMs).toBe(3_600_000)
+    g.finish(1000 + 90_000)
+    expect(g.state.phase).toBe('finished')
+    expect(g.state.elapsedMs).toBe(90_000)
+    expect(g.state.newRecord).toBe(false)
+    expect(localStorage.getItem('sheet-music:records-v2')).toBeNull()
+  })
+
   it('dure 1 min par défaut', () => {
     const g = createReadingGame()
     g.setup(settingsFor('treble'), seededRng(1))
