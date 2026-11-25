@@ -7,6 +7,7 @@ import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
+import SoundToggle from '@/components/SoundToggle.vue'
 import {
   CLEF_MODES,
   loadSettings,
@@ -24,6 +25,10 @@ const route = useRoute()
 const router = useRouter()
 
 const settings = ref(settingsFromQuery(route.query, loadSettings()))
+const DURATION_WORDS: Record<number, string> = {
+  30: 'Trente secondes', 60: 'Une minute', 120: 'Deux minutes', 180: 'Trois minutes', 300: 'Cinq minutes',
+}
+const durationWords = computed(() => DURATION_WORDS[settings.value.duration] ?? `${settings.value.duration} secondes`)
 const clefMode = computed({
   get: () => settings.value.clefMode,
   set: (v: ClefMode) => {
@@ -105,14 +110,14 @@ function play() {
         <v-icon :icon="mdiArrowLeft" size="20" /><BrandMark /><span>Lecture</span>
       </router-link>
       <div class="topbar-actions">
-        <FullscreenToggle /><ThemeToggle />
+        <SoundToggle /><FullscreenToggle /><ThemeToggle />
       </div>
     </header>
 
     <main class="menu-main">
       <div class="hero">
         <h1>Lis les notes.</h1>
-        <p class="lead">Deux minutes pour en nommer un maximum. Une note juste&nbsp;: +1. Une&nbsp;fausse&nbsp;:&nbsp;−1.</p>
+        <p class="lead">{{ durationWords }} pour en nommer un maximum. Une note juste&nbsp;: +1. Une&nbsp;fausse&nbsp;:&nbsp;−1.</p>
       </div>
 
       <form class="settings card" @submit.prevent="play">

@@ -10,6 +10,7 @@ function make(clefMode: ClefMode, t: [string, string], b: [string, string], maxL
     clefMode,
     ranges: { treble: { low: t[0], high: t[1] }, bass: { low: b[0], high: b[1] } },
     maxLeap,
+    duration: 60,
   }
 }
 

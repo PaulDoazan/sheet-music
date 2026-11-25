@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/vue-query'
 import { useTheme } from 'vuetify'
 import { mdiClose, mdiDownload, mdiUpload } from '@mdi/js'
 import { scoreKeys } from '@/features/editor/queries'
+import { setSoundOn, soundOn } from '@/music/audio/soundPref'
 import { applyImport, buildExport, exportFileName, importSummary, parseImport } from './dataTransfer'
 
 const props = defineProps<{ modelValue: boolean }>()
@@ -98,6 +99,22 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
         </button>
       </header>
 
+      <label class="sound">
+        <span>
+          <b>Son du piano</b>
+          <small>Joue la note quand tu la trouves en lecture</small>
+        </span>
+        <v-switch
+          :model-value="soundOn"
+          color="primary"
+          density="compact"
+          hide-details
+          inset
+          aria-label="Son du piano"
+          @update:model-value="setSoundOn(!!$event)"
+        />
+      </label>
+
       <p class="hint">
         Tes données restent dans ce navigateur. Pour les retrouver sur un autre site ou appareil, exporte-les puis importe le fichier.
       </p>
@@ -128,6 +145,9 @@ onBeforeUnmount(() => mq?.removeEventListener('change', onMq))
 .head { display: flex; align-items: center; justify-content: space-between; }
 .head h2 { font-size: 1.3rem; }
 .short .head h2 { font-size: 1.1rem; }
+.sound { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.sound span { display: flex; flex-direction: column; }
+.sound small { color: var(--ink-2); font-size: 0.85rem; }
 .hint { margin: 0; color: var(--ink-2); font-size: 0.95rem; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .actions .bos-btn { gap: 6px; }

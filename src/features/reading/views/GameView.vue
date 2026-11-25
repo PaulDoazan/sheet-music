@@ -5,13 +5,16 @@ import { mdiArrowLeft } from '@mdi/js'
 import { diatonicIndex, parsePitch, SOLFEGE, type Clef, type Step } from '@/music/model'
 import ScrollingStaff, { type TapeNote } from '@/music/render/ScrollingStaff.vue'
 import { extentForRange } from '@/music/render/layout'
-import { GAME_DURATION_MS, createReadingGame } from '../game'
+import { createReadingGame } from '../game'
 import { CLEF_MODES, loadSettings, playedClefs, recordKey, settingsFromQuery, settingsToQuery, summary } from '../settings'
 import TimelineBar from '../components/TimelineBar.vue'
 import ScoreGauge from '../components/ScoreGauge.vue'
 import NoteButtons from '../components/NoteButtons.vue'
 import RotateHint from '@/components/RotateHint.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
+import SoundToggle from '@/components/SoundToggle.vue'
+import { playPitch, preloadPiano } from '@/music/audio/piano'
+import { soundOn } from '@/music/audio/soundPref'
 
 const route = useRoute()
 const router = useRouter()
@@ -84,6 +87,7 @@ function startGame() {
 function onAnswer(step: Step) {
   const r = game.answer(step)
   if (!r) return
+  if (r.ok) playPitch(r.note.pitch)
   buttons.value?.showResult(step, r.ok)
   const scoreAfter = state.score
   flyToGauge(r.note.id, r.ok, () => {
@@ -131,7 +135,7 @@ function flyToGauge(noteId: string, ok: boolean, onArrive: () => void) {
 }
 
 // ---------- fin de partie ----------
-const notesPerMin = computed(() => Math.round((state.correct + state.wrong) / (GAME_DURATION_MS / 60_000)))
+const notesPerMin = computed(() => Math.round((state.correct + state.wrong) / (game.durationMs.value / 60_000)))
 const modeLabel = computed(() => CLEF_MODES.find((m) => m.value === settings.value.clefMode)?.label ?? '')
 watch(
   () => state.phase,
@@ -145,6 +149,8 @@ function quit() {
 }
 
 onMounted(startGame)
+// échantillons chargés pendant le compte à rebours (ou dès que le son est réactivé)
+watch(soundOn, (on) => on && preloadPiano(), { immediate: true })
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   timers.forEach(clearTimeout)
@@ -159,8 +165,9 @@ watch(() => recordKey(settings.value), startGame)
       <button class="bos-btn small round" type="button" aria-label="Retour au menu" @click="quit">
         <v-icon :icon="mdiArrowLeft" size="20" />
       </button>
-      <TimelineBar :remaining-ms="state.remainingMs" :total-ms="GAME_DURATION_MS" />
+      <TimelineBar :remaining-ms="state.remainingMs" :total-ms="game.durationMs.value" />
       <ScoreGauge ref="gauge" :score="displayedScore" :target="game.target.value" />
+      <SoundToggle />
       <FullscreenToggle />
     </header>
 

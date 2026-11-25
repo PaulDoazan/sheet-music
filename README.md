@@ -59,3 +59,7 @@ Design : [lecture](docs/superpowers/specs/2026-11-19-lecture-notes-mvp-design.md
 6. Rediriger `www` vers le domaine nu : **Rules** → **Redirect Rules** → règle « si le nom d'hôte est `www.<ton-domaine>`, rediriger (dynamique ou statique) vers `https://<ton-domaine>/`, code 301 ».
 7. **Migrer les données** (le stockage est local à chaque origine) : sur `pauldoazan.github.io/sheet-music`, ⚙ sur l'accueil → **Exporter** ; sur `https://<ton-domaine>/`, ⚙ → **Importer**.
 8. Plus tard, une fois les données migrées : remplacer le site GitHub Pages par une redirection vers le nouveau domaine.
+
+## Crédits
+
+Son de piano : échantillons [Salamander Grand Piano](https://archive.org/details/SalamanderGrandPianoV3) d'Alexander Holm, sous licence [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/) (version MP3 diffusée par Tone.js), dans `public/audio/piano/`.
