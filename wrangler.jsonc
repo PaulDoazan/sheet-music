@@ -1,0 +1,21 @@
+// Déploiement Cloudflare : Worker qui sert le build Vite de `dist` et l'API du formulaire de contact.
+// Le build est lancé par Cloudflare (commande de build) avant `npx wrangler deploy`.
+// Secrets à définir une fois (`npx wrangler secret put <NOM>`) : CONTACT_TO, TURNSTILE_SITE_KEY, TURNSTILE_SECRET.
+{
+  "$schema": "https://unpkg.com/wrangler@4.167.0/config-schema.json",
+  "name": "sheet-music",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-23",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // seules les routes d'API passent par le code du Worker, le reste est servi directement
+    "run_worker_first": ["/api/*"],
+    // routeur en mode hash : toute autre URL renvoie l'app
+    "not_found_handling": "single-page-application"
+  },
+  // envoi des messages de contact via Email Routing (destinataire = secret CONTACT_TO, adresse vérifiée)
+  "send_email": [{ "name": "CONTACT_EMAIL" }],
+  "vars": { "CONTACT_FROM": "contact@solfabox.app" },
+  "observability": { "enabled": true }
+}

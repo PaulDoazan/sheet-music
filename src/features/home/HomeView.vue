@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { mdiCogOutline, mdiMusicNote, mdiPencil } from '@mdi/js'
+import { mdiCogOutline, mdiEmailOutline, mdiMusicNote, mdiPencil } from '@mdi/js'
 import { parsePitch, type Clef, type Score } from '@/music/model'
 import StaffView from '@/music/render/StaffView.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import FullscreenToggle from '@/components/FullscreenToggle.vue'
 import SettingsDialog from '@/features/settings/SettingsDialog.vue'
+import ContactDialog from '@/features/contact/ContactDialog.vue'
 
 const settingsOpen = ref(false)
+const contactOpen = ref(false)
 
 // Mini-portées d'illustration (même motif que le menu Lecture)
 function miniScore(id: string, clef: Clef, pitches: string[], duration: 'q' | 'h'): Score {
@@ -56,7 +58,12 @@ const extents = [{ above: 1, below: 1 }]
         <p>Écris, écoute, exporte</p>
       </router-link>
     </main>
+
+    <footer class="foot">
+      <button class="bos-btn small" type="button" @click="contactOpen = true"><v-icon :icon="mdiEmailOutline" size="18" /> Contact</button>
+    </footer>
     <SettingsDialog v-model="settingsOpen" />
+    <ContactDialog v-model="contactOpen" />
   </div>
 </template>
 
@@ -83,6 +90,9 @@ const extents = [{ above: 1, below: 1 }]
 .choice p { margin: 0; color: var(--ink-2); font-size: 1.05rem; }
 .mini { width: 100%; height: 96px; pointer-events: none; }
 
+.foot { display: flex; justify-content: center; padding-top: 12px; }
+.foot .bos-btn { gap: 6px; }
+
 /* Mobile paysage : tout tient sans scroll */
 @media (orientation: landscape) and (max-height: 500px) {
   .topbar { padding: 6px 0; }
@@ -91,6 +101,7 @@ const extents = [{ above: 1, below: 1 }]
   .mini { height: 64px; }
   .choice h2 { font-size: 1.6rem; }
   .choice p { font-size: 0.95rem; }
+  .foot { padding-top: 6px; }
 }
 /* Portrait / étroit : une colonne */
 @media (max-width: 700px) and (orientation: portrait) {
